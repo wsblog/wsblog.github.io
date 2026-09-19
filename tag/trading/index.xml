@@ -1,0 +1,378 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Trading | Wit's Blog</title><link>https://witsblog.github.io/tag/trading/</link><atom:link href="https://witsblog.github.io/tag/trading/index.xml" rel="self" type="application/rss+xml"/><description>Trading</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-us</language><lastBuildDate>Wed, 12 Feb 2025 00:00:00 +0700</lastBuildDate><image><url>https://witsblog.github.io/media/icon_hu66cf44b0d2eab4dae9de00f68d847da7_1567_512x512_fill_lanczos_center_3.png</url><title>Trading</title><link>https://witsblog.github.io/tag/trading/</link></image><item><title>Limit Order Book Construction</title><link>https://witsblog.github.io/post/056_lob/</link><pubDate>Wed, 12 Feb 2025 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/056_lob/</guid><description>&lt;br>
+&lt;p>
+&lt;figure id="figure-baseline">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/056/flamegraph_baseline.svg" alt="Baseline" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Baseline
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+&lt;iframe src="https://www.youtube.com/embed/HSaOuo2sAX0" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" allowfullscreen title="YouTube Video">&lt;/iframe>
+&lt;/div>
+&lt;br>
+&lt;div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+&lt;iframe src="https://www.youtube.com/embed/OnUE3DpeKC8" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" allowfullscreen title="YouTube Video">&lt;/iframe>
+&lt;/div>
+&lt;br>
+&lt;p>
+&lt;figure id="figure-impl-v2">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/056/flamegraph_02.svg" alt="Impl v2" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Impl v2
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;br></description></item><item><title>Dissecting the Algorithmic Trading Engine</title><link>https://witsblog.github.io/post/025_trading_backtesting/</link><pubDate>Sat, 05 Aug 2023 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/025_trading_backtesting/</guid><description>&lt;style type="text/css">
+pre[class] {
+max-height: 750px;
+}
+::-webkit-scrollbar {
+width: auto;
+}
+::-webkit-scrollbar-thumb {
+border-radius: 4px;
+background-color: rgba(255, 255, 255, .5);
+}
+.scrollable-element {
+}
+&lt;/style>
+&lt;p>Recently, my job has become a bit monotonous, and I find myself missing the challenges and excitement of working with low-level languages like C++. So I start to grow my interest in algorithmic trading. The blend of real-time data processing, sophisticated algorithms, and performance optimization makes this an interesting topic to study.&lt;/p>
+&lt;p>In this post, I will dive into one of the algorithmic trading engine, explore its architecture, and try to understand how things work under the hood.&lt;/p>
+&lt;br>
+&lt;h2 id="1-architecture-overview">1) Architecture Overview&lt;/h2>
+&lt;p>The Engine composes of multiple components. The classes in the diagram below are not completed.&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/025/01.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;ul>
+&lt;li>
+&lt;p>As a user, we write an algorithm in the &lt;code>Algorithm&lt;/code> class.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>The &lt;code>Engine&lt;/code> is responsible for creating the &lt;code>Algorithm&lt;/code> and all necessary threads. It then delegates the execution to &lt;code>AlgorithmManager&lt;/code>.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>The &lt;code>AlgorithmManager&lt;/code> is where the &lt;strong>main loop&lt;/strong> resides, which seems to oversee the execution and pass stuff to the &lt;code>Algorithm&lt;/code>. It uses &lt;code>Synchronizer&lt;/code> to &lt;em>pump&lt;/em> or &lt;em>feed&lt;/em> data into the &lt;code>Algorithm&lt;/code>&amp;rsquo;s &lt;code>onData()&lt;/code> method.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>The &lt;code>AlgorithmManager&lt;/code>&amp;rsquo;s &lt;code>Run()&lt;/code> method gets an &lt;code>AlgorithmHandler&lt;/code> as a parameter which has several handlers:&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>TransactionHandler&lt;/code>
+&lt;ul>
+&lt;li>This defines how the transactions are processed and set the order fill information. It uses &lt;code>Brokerage&lt;/code> to perform the task.&lt;/li>
+&lt;li>It also interacts with the &lt;code>Algorithm&lt;/code>&amp;rsquo;s &lt;code>SecurityPortfolioManager&lt;/code>, which seems to have the functionality to simulate the fees, slippage, and other trading condition, through &lt;code>BrokerageModel&lt;/code>.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;code>RealTimeHandler&lt;/code>
+&lt;ul>
+&lt;li>This triggers functions at regular or predefined intervals.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;code>ResultHandler&lt;/code>
+&lt;ul>
+&lt;li>This handles the results of the trading, generating statistics, etc.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>
+&lt;p>The &lt;code>Algorithm&lt;/code> also has access to several entities:&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>BrokerageModel&lt;/code>&lt;/li>
+&lt;li>&lt;code>SecurityManager&lt;/code>&lt;/li>
+&lt;li>&lt;code>SecurityPortfolioManager&lt;/code>&lt;/li>
+&lt;li>&lt;code>SecurityTransactionManager&lt;/code>&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>
+&lt;p>The &lt;code>Synchronizer&lt;/code> has a &lt;code>DataManager&lt;/code> which has a &lt;code>LiveTradingDataFeed&lt;/code> which implements &lt;code>IDataFeed&lt;/code> interface. This &lt;code>LiveTradingDataFeed&lt;/code> is where the live data is coming from, and the &lt;code>Synchronizer&lt;/code> provides the mechanisum to stream this data to the &lt;code>Algorithm&lt;/code>&amp;rsquo;s &lt;code>onData()&lt;/code> method mentioned earlier.&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="2-main-loop">2) Main Loop&lt;/h2>
+&lt;p>The main loop of an algorithmic trading engine is where the magic happens. Below is the code reference, but I will try to break it down later:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-csharp" data-lang="csharp">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">public&lt;/span> &lt;span class="k">void&lt;/span> &lt;span class="n">Run&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">IAlgorithm&lt;/span> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">ISynchronizer&lt;/span> &lt;span class="n">synchronizer&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">ITransactionHandler&lt;/span> &lt;span class="n">transactions&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">IResultHandler&lt;/span> &lt;span class="n">results&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">IRealTimeHandler&lt;/span> &lt;span class="n">realtime&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">CancellationToken&lt;/span> &lt;span class="n">token&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">backtestMode&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">job&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Type&lt;/span> &lt;span class="p">==&lt;/span> &lt;span class="n">PacketType&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">BacktestNode&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">methodInvokers&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="n">Dictionary&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">Type&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">MethodInvoker&lt;/span>&lt;span class="p">&amp;gt;();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">marginCallFrequency&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">TimeSpan&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">FromMinutes&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="m">5&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">nextMarginCallTime&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">DateTime&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">MinValue&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataTradeBars&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">TradeBars&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataQuoteBars&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">QuoteBars&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataOptionChains&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">OptionChains&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataTicks&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">Ticks&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataDividends&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">Dividends&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataSplits&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">Splits&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataDelistings&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">Delistings&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataSymbolChangedEvents&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">SymbolChangedEvents&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Go through the subscription types and create invokers to trigger the event handlers for each custom type...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Loop over the queues: get a data collection, then pass them all into relevent methods in the algorithm.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">foreach&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="kt">var&lt;/span> &lt;span class="n">timeSlice&lt;/span> &lt;span class="k">in&lt;/span> &lt;span class="n">Stream&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">synchronizer&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">results&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">token&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">time&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Time&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SetDateTime&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">time&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Update the current slice before firing scheduled events or any other task&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SetCurrentSlice&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SymbolChangedEvents&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Count&lt;/span> &lt;span class="p">!=&lt;/span> &lt;span class="m">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">hasOnDataSymbolChangedEvents&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="k">typeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">SymbolChangedEvents&lt;/span>&lt;span class="p">)](&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SymbolChangedEvents&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Cancel all orders for the old symbol&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">foreach&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="kt">var&lt;/span> &lt;span class="n">symbol&lt;/span> &lt;span class="k">in&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SymbolChangedEvents&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Keys&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">foreach&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="kt">var&lt;/span> &lt;span class="n">ticket&lt;/span> &lt;span class="k">in&lt;/span> &lt;span class="n">transactions&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">GetOpenOrderTickets&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">x&lt;/span> &lt;span class="p">=&amp;gt;&lt;/span> &lt;span class="n">x&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Symbol&lt;/span> &lt;span class="p">==&lt;/span> &lt;span class="n">symbol&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">ticket&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Cancel&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Open order cancelled on symbol changed event&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SecurityChanges&lt;/span> &lt;span class="p">!=&lt;/span> &lt;span class="n">SecurityChanges&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">None&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ProcessSecurityChanges&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SecurityChanges&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">realtime&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OnSecuritiesChanged&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SecurityChanges&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">results&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OnSecuritiesChanged&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SecurityChanges&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Update the securities properties: first before calling user code to avoid issues with data&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">foreach&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="kt">var&lt;/span> &lt;span class="n">update&lt;/span> &lt;span class="k">in&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SecuritiesUpdateData&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">security&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">update&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Target&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">security&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Update&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">update&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Data&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">update&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">DataType&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">update&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ContainsFillForwardData&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Send market price updates to the TradeBuilder&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">TradeBuilder&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SetMarketPrice&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">security&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Symbol&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">security&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Price&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Security prices got updated&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Portfolio&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">InvalidateTotalPortfolioValue&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Process fill models on the updated data before entering algorithm, applies to all non-market orders&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">transactions&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ProcessSynchronousEvents&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Fire real time events after we&amp;#39;ve updated based on the new data&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">realtime&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SetTime&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Time&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Process split warnings for options&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">ProcessSplitSymbols&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">splitWarnings&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">pendingDelistings&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Check if the user&amp;#39;s signalled Quit: loop over data until day changes ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Perform margin calls, in live mode we can also use realtime to emit these&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">time&lt;/span> &lt;span class="p">&amp;gt;=&lt;/span> &lt;span class="n">nextMarginCallTime&lt;/span> &lt;span class="p">||&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">_liveMode&lt;/span> &lt;span class="p">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">nextMarginCallTime&lt;/span> &lt;span class="p">&amp;gt;&lt;/span> &lt;span class="n">DateTime&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">UtcNow&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Determine if there are possible margin call orders to be executed&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">bool&lt;/span> &lt;span class="n">issueMarginCallWarning&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">marginCallOrders&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Portfolio&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">MarginCallModel&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">GetMarginCallOrders&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">out&lt;/span> &lt;span class="n">issueMarginCallWarning&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">marginCallOrders&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Count&lt;/span> &lt;span class="p">!=&lt;/span> &lt;span class="m">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">executingMarginCall&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="kc">false&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">try&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Execute the margin call orders&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">executedTickets&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Portfolio&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">MarginCallModel&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ExecuteMarginCall&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">marginCallOrders&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">catch&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">Exception&lt;/span> &lt;span class="n">err&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SetRuntimeError&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">err&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">executingMarginCall&lt;/span> &lt;span class="p">?&lt;/span> &lt;span class="s">&amp;#34;Portfolio.MarginCallModel.ExecuteMarginCall&amp;#34;&lt;/span> &lt;span class="p">:&lt;/span> &lt;span class="s">&amp;#34;OnMarginCall&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">nextMarginCallTime&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">time&lt;/span> &lt;span class="p">+&lt;/span> &lt;span class="n">marginCallFrequency&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Before we call any events, let the algorithm know about universe changes ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Apply dividends&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">HandleDividends&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">_liveMode&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Apply splits&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">HandleSplits&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">_liveMode&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Fire custom event handlers&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Fire off the dividend and split events before pricing events&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Only track pending delistings in non-live mode.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Run split logic after firing split events&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">HandleSplitSymbols&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Splits&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">splitWarnings&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// After we&amp;#39;ve fired all other events in this second, fire the pricing events:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">try&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">hasOnDataTradeBars&lt;/span> &lt;span class="p">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Bars&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Count&lt;/span> &lt;span class="p">&amp;gt;&lt;/span> &lt;span class="m">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="k">typeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">TradeBars&lt;/span>&lt;span class="p">)](&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Bars&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">hasOnDataQuoteBars&lt;/span> &lt;span class="p">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">QuoteBars&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Count&lt;/span> &lt;span class="p">&amp;gt;&lt;/span> &lt;span class="m">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="k">typeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">QuoteBars&lt;/span>&lt;span class="p">)](&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">QuoteBars&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">hasOnDataOptionChains&lt;/span> &lt;span class="p">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OptionChains&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Count&lt;/span> &lt;span class="p">&amp;gt;&lt;/span> &lt;span class="m">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="k">typeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">OptionChains&lt;/span>&lt;span class="p">)](&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OptionChains&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">hasOnDataTicks&lt;/span> &lt;span class="p">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Ticks&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Count&lt;/span> &lt;span class="p">&amp;gt;&lt;/span> &lt;span class="m">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="k">typeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Ticks&lt;/span>&lt;span class="p">)](&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Ticks&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">catch&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">Exception&lt;/span> &lt;span class="n">err&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SetRuntimeError&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">err&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;methodInvokers&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">try&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">HasData&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OnData&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">catch&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">Exception&lt;/span> &lt;span class="n">err&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SetRuntimeError&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">err&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;OnData&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// If its the historical/paper trading models, wait until market orders have been &amp;#34;filled&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Manually trigger the event handler to prevent thread switch.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">transactions&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ProcessSynchronousEvents&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Process any required events of the results handler such as sampling assets, equity, or stock prices.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">results&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ProcessSynchronousEvents&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Poke the algorithm at the end of each time step&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OnEndOfTimeStep&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Stream over:: Send the final packet and fire final events ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Process any required events of the results handler such as sampling assets, equity, or stock prices.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">results&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ProcessSynchronousEvents&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">forceProcess&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="kc">true&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Liquidate Holdings for Calculations:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">_algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Status&lt;/span> &lt;span class="p">==&lt;/span> &lt;span class="n">AlgorithmStatus&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Liquidated&lt;/span> &lt;span class="p">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">_liveMode&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Liquidate&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">results&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SendStatusUpdate&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">AlgorithmStatus&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Liquidated&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Manually stopped the algorithm&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">_algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Status&lt;/span> &lt;span class="p">==&lt;/span> &lt;span class="n">AlgorithmStatus&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Stopped&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">Log&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Trace&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;AlgorithmManager.Run(): Stopping algorithm...&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">results&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SendStatusUpdate&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">AlgorithmStatus&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Stopped&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Algorithm finished, send regardless of commands:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">results&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SendStatusUpdate&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">AlgorithmStatus&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Completed&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">SetStatus&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">AlgorithmStatus&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Completed&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;br>
+&lt;h2 id="3-synchronizer">3) Synchronizer&lt;/h2>
+&lt;p>This is quite interesting because it seems to use a push-based mechanism for streaming the &lt;code>TimeSlice&lt;/code> data into the &lt;code>Algorithm&lt;/code>. Notice the &lt;code>Stream(...)&lt;/code> function in the main for loop:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-csharp" data-lang="csharp">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">public&lt;/span> &lt;span class="k">void&lt;/span> &lt;span class="n">Run&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Initialization and setup&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">foreach&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="kt">var&lt;/span> &lt;span class="n">timeSlice&lt;/span> &lt;span class="k">in&lt;/span> &lt;span class="n">Stream&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">synchronizer&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">results&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">token&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Core processing logic&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OnData&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Finalization and cleanup&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>The &lt;code>Stream(...)&lt;/code> function is a wrapper function inside &lt;code>AlgorithmManager&lt;/code>. The mechanism of returning a &lt;code>TimeSlice&lt;/code> data is actually implemented in the &lt;code>StreamData(...)&lt;/code> function of the &lt;code>LiveSynchronizer&lt;/code> class:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-csharp" data-lang="csharp">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">public&lt;/span> &lt;span class="kd">override&lt;/span> &lt;span class="n">IEnumerable&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">TimeSlice&lt;/span>&lt;span class="p">&amp;gt;&lt;/span> &lt;span class="n">StreamData&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">CancellationToken&lt;/span> &lt;span class="n">cancellationToken&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">while&lt;/span> &lt;span class="p">(!&lt;/span>&lt;span class="n">cancellationToken&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">IsCancellationRequested&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">now&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">DateTime&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">UtcNow&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(!&lt;/span>&lt;span class="n">_newLiveDataEmitted&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">IsSet&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">lastLoopStart&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Second&lt;/span> &lt;span class="p">==&lt;/span> &lt;span class="n">now&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Second&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">_realTimeScheduleEventService&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ScheduleEvent&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">TimeSpan&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">FromMilliseconds&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">GetPulseDueTime&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">now&lt;/span>&lt;span class="p">)),&lt;/span> &lt;span class="n">now&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">_newLiveDataEmitted&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Wait&lt;/span>&lt;span class="p">();&lt;/span> &lt;span class="c1">// Blocks the current thread until it is set&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">_newLiveDataEmitted&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Reset&lt;/span>&lt;span class="p">();&lt;/span> &lt;span class="c1">// Sets the state of the event to nonsignaled.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">lastLoopStart&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">now&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">TimeSlice&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">try&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(!&lt;/span>&lt;span class="n">enumerator&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">MoveNext&lt;/span>&lt;span class="p">())&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">break&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Underlying enumerator is coming from the LiveTradingDataFeed&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">timeSlice&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">enumerator&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Current&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">catch&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">Exception&lt;/span> &lt;span class="n">err&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">break&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Check for cancellation ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">frontierUtc&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">FrontierTimeProvider&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">GetUtcNow&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Emit on data or if we&amp;#39;ve elapsed a full second since last emit&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// or there are security changes&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SecurityChanges&lt;/span> &lt;span class="p">!=&lt;/span> &lt;span class="n">SecurityChanges&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">None&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">||&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">IsTimePulse&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">||&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Data&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Count&lt;/span> &lt;span class="p">!=&lt;/span> &lt;span class="m">0&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">||&lt;/span> &lt;span class="n">frontierUtc&lt;/span> &lt;span class="p">&amp;gt;=&lt;/span> &lt;span class="n">nextEmit&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">yield&lt;/span> &lt;span class="k">return&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="c1">// &amp;lt;--- Return the TimeSlice !&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">nextEmit&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">frontierUtc&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">RoundDown&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Time&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OneSecond&lt;/span>&lt;span class="p">).&lt;/span>&lt;span class="n">Add&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Time&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OneSecond&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>What I don&amp;rsquo;t fully understand is the use of &lt;code>System.Threading.ManualResetEventSlim&lt;/code> class (&lt;code>_newLiveDataEmitted&lt;/code> variable) to wait for a new live data, in case the loop is running within the same second and the &lt;code>_newLiveDataEmitted&lt;/code> is not set.&lt;/p>
+&lt;ul>
+&lt;li>Why the need to check if the loop is running within the same second?&lt;/li>
+&lt;li>Why not just always &lt;code>Wait()&lt;/code>?&lt;/li>
+&lt;li>Is this somehting that tries to avoid busy spinning?&lt;/li>
+&lt;/ul>
+&lt;p>As a side note, &lt;code>ManualResetEventSlim&lt;/code> has better performance than &lt;code>ManualResetEvent&lt;/code> when wait times are expected to be very short, as it uses busy spinning for a short time.&lt;/p>
+&lt;br>
+&lt;h2 id="4-data-feed">4) Data Feed&lt;/h2>
+&lt;p>The &lt;code>LiveTradingDataFeed&lt;/code> class creates an enumerator that is used in the &lt;code>StreamData(...)&lt;/code> function of the &lt;code>LiveSynchronizer&lt;/code> class above. There is a chain of function calls but finally it delegates the task of enumerator creation to the &lt;code>LiveDataQueue&lt;/code> class, which, when I look up, is empty!&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-csharp" data-lang="csharp">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">public&lt;/span> &lt;span class="k">class&lt;/span> &lt;span class="nc">LiveDataQueue&lt;/span> &lt;span class="p">:&lt;/span> &lt;span class="n">IDataQueueHandler&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kd">public&lt;/span> &lt;span class="n">IEnumerator&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">BaseData&lt;/span>&lt;span class="p">&amp;gt;&lt;/span> &lt;span class="n">Subscribe&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">SubscriptionDataConfig&lt;/span> &lt;span class="n">dataConfig&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">EventHandler&lt;/span> &lt;span class="n">newDataAvailableHandler&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">throw&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="n">NotImplementedException&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Not implemented&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kd">public&lt;/span> &lt;span class="k">virtual&lt;/span> &lt;span class="k">void&lt;/span> &lt;span class="n">Unsubscribe&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">SubscriptionDataConfig&lt;/span> &lt;span class="n">dataConfig&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">throw&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="n">NotImplementedException&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Not implemented&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Returns whether the data provider is connected&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kd">public&lt;/span> &lt;span class="kt">bool&lt;/span> &lt;span class="n">IsConnected&lt;/span> &lt;span class="p">=&amp;gt;&lt;/span> &lt;span class="kc">false&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Performs application-defined tasks associated with freeing,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// releasing, or resetting unmanaged resources.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kd">public&lt;/span> &lt;span class="k">void&lt;/span> &lt;span class="n">Dispose&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>I guess this is typically implemented by connecting to a live data provider or exchange using web sockets or other real-time data streaming mechanisms.&lt;/p>
+&lt;p>Would be interesting to see how this part is implemented in a production environment. Even more interesting would be to understand how HFT firms implement the entire trading engine!&lt;/p>
+&lt;br></description></item></channel></rss>

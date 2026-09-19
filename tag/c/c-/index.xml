@@ -1,0 +1,756 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>C/C++ | Wit's Blog</title><link>https://witsblog.github.io/tag/c/c-/</link><atom:link href="https://witsblog.github.io/tag/c/c-/index.xml" rel="self" type="application/rss+xml"/><description>C/C++</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-us</language><image><url>https://witsblog.github.io/media/icon_hu66cf44b0d2eab4dae9de00f68d847da7_1567_512x512_fill_lanczos_center_3.png</url><title>C/C++</title><link>https://witsblog.github.io/tag/c/c-/</link></image><item><title>Limit Order Book Construction</title><link>https://witsblog.github.io/post/056_lob/</link><pubDate>Wed, 12 Feb 2025 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/056_lob/</guid><description>&lt;br>
+&lt;p>
+&lt;figure id="figure-baseline">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/056/flamegraph_baseline.svg" alt="Baseline" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Baseline
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+&lt;iframe src="https://www.youtube.com/embed/HSaOuo2sAX0" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" allowfullscreen title="YouTube Video">&lt;/iframe>
+&lt;/div>
+&lt;br>
+&lt;div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+&lt;iframe src="https://www.youtube.com/embed/OnUE3DpeKC8" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" allowfullscreen title="YouTube Video">&lt;/iframe>
+&lt;/div>
+&lt;br>
+&lt;p>
+&lt;figure id="figure-impl-v2">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/056/flamegraph_02.svg" alt="Impl v2" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Impl v2
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;br></description></item><item><title>A Curious Case of Mutex vs Reader-Writer Lock !?</title><link>https://witsblog.github.io/post/030_cpp_lock/</link><pubDate>Sat, 16 Sep 2023 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/030_cpp_lock/</guid><description>&lt;p>I&amp;rsquo;ve long believed that &lt;strong>reader-writer locks&lt;/strong> would outperform &lt;strong>mutexes&lt;/strong> in scenarios with multiple readers and occasional writers. It seemes intuitive: allowing concurrent reads while ensuring exclusive writes should, in theory, optimize performance.&lt;/p>
+&lt;details class="spoiler " id="spoiler-0">
+&lt;summary>So, is a reader-writer lock better than a mutex?&lt;/summary>
+&lt;p>It depends!&lt;/p>
+&lt;/details>
+&lt;p>I decided to write a small performance test for this. And the initial results were not what I expected at all—they were quite the opposite and very surprising. &lt;mark>&lt;em>The mutex outperforms a reader-writer lock!?&lt;/em>&lt;/mark> How can this be?&lt;/p>
+&lt;p>&lt;del>I haven&amp;rsquo;t yet pinpointed the exact reasons, but I hope to dive deeper into this later.&lt;/del>&lt;/p>
+&lt;br>
+&lt;h2 id="test-design">Test Design&lt;/h2>
+&lt;p>In this experiment, I aim to evaluate the contention performance of an object implementing the following interface. Multiple threads will concurrently call &lt;code>read&lt;/code> and &lt;code>update&lt;/code> methods, and we will measure the throughput of reads and writes.&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">class&lt;/span> &lt;span class="nc">MyObject&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">public&lt;/span>&lt;span class="o">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">virtual&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="n">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">array&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="kt">int&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">2&lt;/span>&lt;span class="o">&amp;gt;&amp;amp;&lt;/span> &lt;span class="n">coordinates&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">virtual&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="nf">update&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">dx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="n">dy&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">virtual&lt;/span> &lt;span class="o">~&lt;/span>&lt;span class="n">MyObject&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="k">default&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;br>
+&lt;h2 id="mutex">Mutex&lt;/h2>
+&lt;p>The &lt;code>std::mutex&lt;/code> class is a synchronization primitive that can be used to protect shared data from being simultaneously accessed by multiple threads.&lt;/p>
+&lt;p>The &lt;code>std::lock_guard&lt;/code> is a template class that provides a convenient RAII (Resource Acquisition Is Initialization) mechanism for managing ownership of a mutex.&lt;/p>
+&lt;p>In this implementation, we use &lt;code>std::lock_guard&lt;/code> to get exclusive access to the lock &lt;code>mutex_&lt;/code> for both &lt;code>read&lt;/code> and &lt;code>update&lt;/code> operation. This means that only one thread can access or modify &lt;code>x_&lt;/code> and &lt;code>y_&lt;/code> at any given time.&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// SynchronizedObject.h --------------------------------------------------------
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="k">class&lt;/span> &lt;span class="nc">SynchronizedObject&lt;/span> &lt;span class="o">:&lt;/span> &lt;span class="k">public&lt;/span> &lt;span class="n">MyObject&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">public&lt;/span>&lt;span class="o">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">int&lt;/span> &lt;span class="n">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">array&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="kt">int&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">2&lt;/span>&lt;span class="o">&amp;gt;&amp;amp;&lt;/span> &lt;span class="n">coordinates&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="k">override&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">int&lt;/span> &lt;span class="nf">update&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">dx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="n">dy&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="k">override&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">private&lt;/span>&lt;span class="o">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">mutex&lt;/span> &lt;span class="n">mutex_&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">int&lt;/span> &lt;span class="n">x_&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">int&lt;/span> &lt;span class="n">y_&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// SynchronizedObject.cpp ------------------------------------------------------
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">SynchronizedObject&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">array&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="kt">int&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">2&lt;/span>&lt;span class="o">&amp;gt;&amp;amp;&lt;/span> &lt;span class="n">coordinates&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">lock_guard&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">mutex&lt;/span>&lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">lock&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">mutex_&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">coordinates&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">x_&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">coordinates&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">y_&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">int&lt;/span> &lt;span class="n">SynchronizedObject&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">update&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">dx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="n">dy&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">lock_guard&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">mutex&lt;/span>&lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">lock&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">mutex_&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">x_&lt;/span> &lt;span class="o">+=&lt;/span> &lt;span class="n">dx&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">y_&lt;/span> &lt;span class="o">+=&lt;/span> &lt;span class="n">dy&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;br>
+&lt;h2 id="reader-writer-lock">Reader-Writer Lock&lt;/h2>
+&lt;p>In this implementation, we use &lt;code>std::shared_mutex&lt;/code> instead. This is the documentation:&lt;/p>
+&lt;blockquote>
+&lt;p>Shared mutexes are especially useful when shared data can be safely read by any number of threads simultaneously, but a thread may only write the same data when no other thread is reading or writing at the same time.&lt;/p>
+&lt;/blockquote>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// ReadWriteLockObject.h -------------------------------------------------------
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="k">class&lt;/span> &lt;span class="nc">ReadWriteLockObject&lt;/span> &lt;span class="o">:&lt;/span> &lt;span class="k">public&lt;/span> &lt;span class="n">MyObject&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">public&lt;/span>&lt;span class="o">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">int&lt;/span> &lt;span class="n">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">array&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="kt">int&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">2&lt;/span>&lt;span class="o">&amp;gt;&amp;amp;&lt;/span> &lt;span class="n">coordinates&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="k">override&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">int&lt;/span> &lt;span class="nf">update&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">xDelta&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="n">yDelta&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="k">override&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">private&lt;/span>&lt;span class="o">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">shared_mutex&lt;/span> &lt;span class="n">mutex_&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="c1">// Shared!
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="n">x_&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">int&lt;/span> &lt;span class="n">y_&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// ReadWriteLockObject.cpp -----------------------------------------------------
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">ReadWriteLockObject&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">array&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="kt">int&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">2&lt;/span>&lt;span class="o">&amp;gt;&amp;amp;&lt;/span> &lt;span class="n">coordinates&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">shared_lock&lt;/span> &lt;span class="n">lock&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">mutex_&lt;/span>&lt;span class="p">);&lt;/span> &lt;span class="c1">// Multiple threads/readers can read
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">coordinates&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">x_&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">coordinates&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">y_&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">int&lt;/span> &lt;span class="n">ReadWriteLockObject&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">update&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">dx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="n">dy&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">lock_guard&lt;/span> &lt;span class="n">lock&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">mutex_&lt;/span>&lt;span class="p">);&lt;/span> &lt;span class="c1">// Only one thread/writer can update
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">x_&lt;/span> &lt;span class="o">+=&lt;/span> &lt;span class="n">dx&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">y_&lt;/span> &lt;span class="o">+=&lt;/span> &lt;span class="n">dy&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>The use of &lt;code>std::shared_lock&lt;/code> in the &lt;code>read&lt;/code> operation allows multiple threads to enter this code section. So multiple threads trying to read won&amp;rsquo;t contend each other.&lt;/p>
+&lt;br>
+&lt;h2 id="initial-results">Initial Results&lt;/h2>
+&lt;p>What a surprising result. In the above settings, the &lt;strong>mutexs&lt;/strong> outperform &lt;strong>reader-writer locks&lt;/strong>!?&lt;/p>
+&lt;p>What&amp;rsquo;s wrong? If this is the case, why the invent of &lt;strong>reader-writer lock&lt;/strong> at all?&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/030/01.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/030/02.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/030/03.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/030/04.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h2 id="the-reason">The Reason&lt;/h2>
+&lt;p>After spending some time figuring out, the exact reason is that: &lt;mark>the critial section while holding the lock is too short&lt;/mark>. As a result, the overhead of the reader-writer lock becomes significant, making it perform worse than a mutex in the initial results.&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="kt">int&lt;/span> &lt;span class="n">ReadWriteLockObject&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">update&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">dx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="n">dy&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">lock_guard&lt;/span> &lt;span class="n">lock&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">mutex_&lt;/span>&lt;span class="p">);&lt;/span> &lt;span class="c1">// Only one thread/writer can update
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="c1">// If this critial section takes longer, reader-writer lock is more efficient
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">x_&lt;/span> &lt;span class="o">+=&lt;/span> &lt;span class="n">dx&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">y_&lt;/span> &lt;span class="o">+=&lt;/span> &lt;span class="n">dy&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>If we increase the time spent while holding the lock in &lt;code>update&lt;/code> function, the result is as what I expected. Now the reader-writter lock starts to outperform the mutex!&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/030/05.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/030/06.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/030/07.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/030/08.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p></description></item><item><title>Dissecting the Algorithmic Trading Engine</title><link>https://witsblog.github.io/post/025_trading_backtesting/</link><pubDate>Sat, 05 Aug 2023 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/025_trading_backtesting/</guid><description>&lt;style type="text/css">
+pre[class] {
+max-height: 750px;
+}
+::-webkit-scrollbar {
+width: auto;
+}
+::-webkit-scrollbar-thumb {
+border-radius: 4px;
+background-color: rgba(255, 255, 255, .5);
+}
+.scrollable-element {
+}
+&lt;/style>
+&lt;p>Recently, my job has become a bit monotonous, and I find myself missing the challenges and excitement of working with low-level languages like C++. So I start to grow my interest in algorithmic trading. The blend of real-time data processing, sophisticated algorithms, and performance optimization makes this an interesting topic to study.&lt;/p>
+&lt;p>In this post, I will dive into one of the algorithmic trading engine, explore its architecture, and try to understand how things work under the hood.&lt;/p>
+&lt;br>
+&lt;h2 id="1-architecture-overview">1) Architecture Overview&lt;/h2>
+&lt;p>The Engine composes of multiple components. The classes in the diagram below are not completed.&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/025/01.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;ul>
+&lt;li>
+&lt;p>As a user, we write an algorithm in the &lt;code>Algorithm&lt;/code> class.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>The &lt;code>Engine&lt;/code> is responsible for creating the &lt;code>Algorithm&lt;/code> and all necessary threads. It then delegates the execution to &lt;code>AlgorithmManager&lt;/code>.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>The &lt;code>AlgorithmManager&lt;/code> is where the &lt;strong>main loop&lt;/strong> resides, which seems to oversee the execution and pass stuff to the &lt;code>Algorithm&lt;/code>. It uses &lt;code>Synchronizer&lt;/code> to &lt;em>pump&lt;/em> or &lt;em>feed&lt;/em> data into the &lt;code>Algorithm&lt;/code>&amp;rsquo;s &lt;code>onData()&lt;/code> method.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>The &lt;code>AlgorithmManager&lt;/code>&amp;rsquo;s &lt;code>Run()&lt;/code> method gets an &lt;code>AlgorithmHandler&lt;/code> as a parameter which has several handlers:&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>TransactionHandler&lt;/code>
+&lt;ul>
+&lt;li>This defines how the transactions are processed and set the order fill information. It uses &lt;code>Brokerage&lt;/code> to perform the task.&lt;/li>
+&lt;li>It also interacts with the &lt;code>Algorithm&lt;/code>&amp;rsquo;s &lt;code>SecurityPortfolioManager&lt;/code>, which seems to have the functionality to simulate the fees, slippage, and other trading condition, through &lt;code>BrokerageModel&lt;/code>.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;code>RealTimeHandler&lt;/code>
+&lt;ul>
+&lt;li>This triggers functions at regular or predefined intervals.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;code>ResultHandler&lt;/code>
+&lt;ul>
+&lt;li>This handles the results of the trading, generating statistics, etc.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>
+&lt;p>The &lt;code>Algorithm&lt;/code> also has access to several entities:&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>BrokerageModel&lt;/code>&lt;/li>
+&lt;li>&lt;code>SecurityManager&lt;/code>&lt;/li>
+&lt;li>&lt;code>SecurityPortfolioManager&lt;/code>&lt;/li>
+&lt;li>&lt;code>SecurityTransactionManager&lt;/code>&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>
+&lt;p>The &lt;code>Synchronizer&lt;/code> has a &lt;code>DataManager&lt;/code> which has a &lt;code>LiveTradingDataFeed&lt;/code> which implements &lt;code>IDataFeed&lt;/code> interface. This &lt;code>LiveTradingDataFeed&lt;/code> is where the live data is coming from, and the &lt;code>Synchronizer&lt;/code> provides the mechanisum to stream this data to the &lt;code>Algorithm&lt;/code>&amp;rsquo;s &lt;code>onData()&lt;/code> method mentioned earlier.&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="2-main-loop">2) Main Loop&lt;/h2>
+&lt;p>The main loop of an algorithmic trading engine is where the magic happens. Below is the code reference, but I will try to break it down later:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-csharp" data-lang="csharp">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">public&lt;/span> &lt;span class="k">void&lt;/span> &lt;span class="n">Run&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">IAlgorithm&lt;/span> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">ISynchronizer&lt;/span> &lt;span class="n">synchronizer&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">ITransactionHandler&lt;/span> &lt;span class="n">transactions&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">IResultHandler&lt;/span> &lt;span class="n">results&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">IRealTimeHandler&lt;/span> &lt;span class="n">realtime&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">CancellationToken&lt;/span> &lt;span class="n">token&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">backtestMode&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">job&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Type&lt;/span> &lt;span class="p">==&lt;/span> &lt;span class="n">PacketType&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">BacktestNode&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">methodInvokers&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="n">Dictionary&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">Type&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">MethodInvoker&lt;/span>&lt;span class="p">&amp;gt;();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">marginCallFrequency&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">TimeSpan&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">FromMinutes&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="m">5&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">nextMarginCallTime&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">DateTime&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">MinValue&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataTradeBars&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">TradeBars&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataQuoteBars&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">QuoteBars&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataOptionChains&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">OptionChains&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataTicks&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">Ticks&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataDividends&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">Dividends&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataSplits&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">Splits&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataDelistings&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">Delistings&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">hasOnDataSymbolChangedEvents&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">AddMethodInvoker&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">SymbolChangedEvents&lt;/span>&lt;span class="p">&amp;gt;(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Go through the subscription types and create invokers to trigger the event handlers for each custom type...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Loop over the queues: get a data collection, then pass them all into relevent methods in the algorithm.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">foreach&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="kt">var&lt;/span> &lt;span class="n">timeSlice&lt;/span> &lt;span class="k">in&lt;/span> &lt;span class="n">Stream&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">synchronizer&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">results&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">token&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">time&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Time&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SetDateTime&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">time&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Update the current slice before firing scheduled events or any other task&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SetCurrentSlice&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SymbolChangedEvents&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Count&lt;/span> &lt;span class="p">!=&lt;/span> &lt;span class="m">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">hasOnDataSymbolChangedEvents&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="k">typeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">SymbolChangedEvents&lt;/span>&lt;span class="p">)](&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SymbolChangedEvents&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Cancel all orders for the old symbol&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">foreach&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="kt">var&lt;/span> &lt;span class="n">symbol&lt;/span> &lt;span class="k">in&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SymbolChangedEvents&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Keys&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">foreach&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="kt">var&lt;/span> &lt;span class="n">ticket&lt;/span> &lt;span class="k">in&lt;/span> &lt;span class="n">transactions&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">GetOpenOrderTickets&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">x&lt;/span> &lt;span class="p">=&amp;gt;&lt;/span> &lt;span class="n">x&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Symbol&lt;/span> &lt;span class="p">==&lt;/span> &lt;span class="n">symbol&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">ticket&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Cancel&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Open order cancelled on symbol changed event&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SecurityChanges&lt;/span> &lt;span class="p">!=&lt;/span> &lt;span class="n">SecurityChanges&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">None&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ProcessSecurityChanges&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SecurityChanges&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">realtime&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OnSecuritiesChanged&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SecurityChanges&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">results&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OnSecuritiesChanged&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SecurityChanges&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Update the securities properties: first before calling user code to avoid issues with data&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">foreach&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="kt">var&lt;/span> &lt;span class="n">update&lt;/span> &lt;span class="k">in&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SecuritiesUpdateData&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">security&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">update&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Target&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">security&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Update&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">update&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Data&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">update&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">DataType&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">update&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ContainsFillForwardData&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Send market price updates to the TradeBuilder&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">TradeBuilder&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SetMarketPrice&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">security&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Symbol&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">security&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Price&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Security prices got updated&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Portfolio&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">InvalidateTotalPortfolioValue&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Process fill models on the updated data before entering algorithm, applies to all non-market orders&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">transactions&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ProcessSynchronousEvents&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Fire real time events after we&amp;#39;ve updated based on the new data&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">realtime&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SetTime&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Time&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Process split warnings for options&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">ProcessSplitSymbols&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">splitWarnings&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">pendingDelistings&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Check if the user&amp;#39;s signalled Quit: loop over data until day changes ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Perform margin calls, in live mode we can also use realtime to emit these&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">time&lt;/span> &lt;span class="p">&amp;gt;=&lt;/span> &lt;span class="n">nextMarginCallTime&lt;/span> &lt;span class="p">||&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">_liveMode&lt;/span> &lt;span class="p">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">nextMarginCallTime&lt;/span> &lt;span class="p">&amp;gt;&lt;/span> &lt;span class="n">DateTime&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">UtcNow&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Determine if there are possible margin call orders to be executed&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">bool&lt;/span> &lt;span class="n">issueMarginCallWarning&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">marginCallOrders&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Portfolio&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">MarginCallModel&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">GetMarginCallOrders&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">out&lt;/span> &lt;span class="n">issueMarginCallWarning&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">marginCallOrders&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Count&lt;/span> &lt;span class="p">!=&lt;/span> &lt;span class="m">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">executingMarginCall&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="kc">false&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">try&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Execute the margin call orders&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">executedTickets&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Portfolio&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">MarginCallModel&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ExecuteMarginCall&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">marginCallOrders&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">catch&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">Exception&lt;/span> &lt;span class="n">err&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SetRuntimeError&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">err&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">executingMarginCall&lt;/span> &lt;span class="p">?&lt;/span> &lt;span class="s">&amp;#34;Portfolio.MarginCallModel.ExecuteMarginCall&amp;#34;&lt;/span> &lt;span class="p">:&lt;/span> &lt;span class="s">&amp;#34;OnMarginCall&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">nextMarginCallTime&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">time&lt;/span> &lt;span class="p">+&lt;/span> &lt;span class="n">marginCallFrequency&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Before we call any events, let the algorithm know about universe changes ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Apply dividends&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">HandleDividends&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">_liveMode&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Apply splits&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">HandleSplits&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">_liveMode&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Fire custom event handlers&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Fire off the dividend and split events before pricing events&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Only track pending delistings in non-live mode.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Run split logic after firing split events&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">HandleSplitSymbols&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Splits&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">splitWarnings&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// After we&amp;#39;ve fired all other events in this second, fire the pricing events:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">try&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">hasOnDataTradeBars&lt;/span> &lt;span class="p">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Bars&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Count&lt;/span> &lt;span class="p">&amp;gt;&lt;/span> &lt;span class="m">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="k">typeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">TradeBars&lt;/span>&lt;span class="p">)](&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Bars&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">hasOnDataQuoteBars&lt;/span> &lt;span class="p">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">QuoteBars&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Count&lt;/span> &lt;span class="p">&amp;gt;&lt;/span> &lt;span class="m">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="k">typeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">QuoteBars&lt;/span>&lt;span class="p">)](&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">QuoteBars&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">hasOnDataOptionChains&lt;/span> &lt;span class="p">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OptionChains&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Count&lt;/span> &lt;span class="p">&amp;gt;&lt;/span> &lt;span class="m">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="k">typeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">OptionChains&lt;/span>&lt;span class="p">)](&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OptionChains&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">hasOnDataTicks&lt;/span> &lt;span class="p">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Ticks&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Count&lt;/span> &lt;span class="p">&amp;gt;&lt;/span> &lt;span class="m">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="n">methodInvokers&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="k">typeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Ticks&lt;/span>&lt;span class="p">)](&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Ticks&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">catch&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">Exception&lt;/span> &lt;span class="n">err&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SetRuntimeError&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">err&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;methodInvokers&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">try&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">HasData&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OnData&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">catch&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">Exception&lt;/span> &lt;span class="n">err&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SetRuntimeError&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">err&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;OnData&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// If its the historical/paper trading models, wait until market orders have been &amp;#34;filled&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Manually trigger the event handler to prevent thread switch.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">transactions&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ProcessSynchronousEvents&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Process any required events of the results handler such as sampling assets, equity, or stock prices.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">results&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ProcessSynchronousEvents&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Poke the algorithm at the end of each time step&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OnEndOfTimeStep&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Stream over:: Send the final packet and fire final events ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Process any required events of the results handler such as sampling assets, equity, or stock prices.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">results&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ProcessSynchronousEvents&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">forceProcess&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="kc">true&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Liquidate Holdings for Calculations:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">_algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Status&lt;/span> &lt;span class="p">==&lt;/span> &lt;span class="n">AlgorithmStatus&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Liquidated&lt;/span> &lt;span class="p">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">_liveMode&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Liquidate&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">results&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SendStatusUpdate&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">AlgorithmStatus&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Liquidated&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Manually stopped the algorithm&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">_algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Status&lt;/span> &lt;span class="p">==&lt;/span> &lt;span class="n">AlgorithmStatus&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Stopped&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">Log&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Trace&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;AlgorithmManager.Run(): Stopping algorithm...&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">results&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SendStatusUpdate&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">AlgorithmStatus&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Stopped&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Algorithm finished, send regardless of commands:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">results&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SendStatusUpdate&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">AlgorithmStatus&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Completed&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">SetStatus&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">AlgorithmStatus&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Completed&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;br>
+&lt;h2 id="3-synchronizer">3) Synchronizer&lt;/h2>
+&lt;p>This is quite interesting because it seems to use a push-based mechanism for streaming the &lt;code>TimeSlice&lt;/code> data into the &lt;code>Algorithm&lt;/code>. Notice the &lt;code>Stream(...)&lt;/code> function in the main for loop:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-csharp" data-lang="csharp">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">public&lt;/span> &lt;span class="k">void&lt;/span> &lt;span class="n">Run&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Initialization and setup&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">foreach&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="kt">var&lt;/span> &lt;span class="n">timeSlice&lt;/span> &lt;span class="k">in&lt;/span> &lt;span class="n">Stream&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">algorithm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">synchronizer&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">results&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">token&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Core processing logic&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">algorithm&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OnData&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Slice&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Finalization and cleanup&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>The &lt;code>Stream(...)&lt;/code> function is a wrapper function inside &lt;code>AlgorithmManager&lt;/code>. The mechanism of returning a &lt;code>TimeSlice&lt;/code> data is actually implemented in the &lt;code>StreamData(...)&lt;/code> function of the &lt;code>LiveSynchronizer&lt;/code> class:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-csharp" data-lang="csharp">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">public&lt;/span> &lt;span class="kd">override&lt;/span> &lt;span class="n">IEnumerable&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">TimeSlice&lt;/span>&lt;span class="p">&amp;gt;&lt;/span> &lt;span class="n">StreamData&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">CancellationToken&lt;/span> &lt;span class="n">cancellationToken&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">while&lt;/span> &lt;span class="p">(!&lt;/span>&lt;span class="n">cancellationToken&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">IsCancellationRequested&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">now&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">DateTime&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">UtcNow&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(!&lt;/span>&lt;span class="n">_newLiveDataEmitted&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">IsSet&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">lastLoopStart&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Second&lt;/span> &lt;span class="p">==&lt;/span> &lt;span class="n">now&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Second&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">_realTimeScheduleEventService&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ScheduleEvent&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">TimeSpan&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">FromMilliseconds&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">GetPulseDueTime&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">now&lt;/span>&lt;span class="p">)),&lt;/span> &lt;span class="n">now&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">_newLiveDataEmitted&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Wait&lt;/span>&lt;span class="p">();&lt;/span> &lt;span class="c1">// Blocks the current thread until it is set&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">_newLiveDataEmitted&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Reset&lt;/span>&lt;span class="p">();&lt;/span> &lt;span class="c1">// Sets the state of the event to nonsignaled.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">lastLoopStart&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">now&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">TimeSlice&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">try&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(!&lt;/span>&lt;span class="n">enumerator&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">MoveNext&lt;/span>&lt;span class="p">())&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">break&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Underlying enumerator is coming from the LiveTradingDataFeed&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">timeSlice&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">enumerator&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Current&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">catch&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">Exception&lt;/span> &lt;span class="n">err&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">break&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Check for cancellation ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">var&lt;/span> &lt;span class="n">frontierUtc&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">FrontierTimeProvider&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">GetUtcNow&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Emit on data or if we&amp;#39;ve elapsed a full second since last emit&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// or there are security changes&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">SecurityChanges&lt;/span> &lt;span class="p">!=&lt;/span> &lt;span class="n">SecurityChanges&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">None&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">||&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">IsTimePulse&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">||&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Data&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Count&lt;/span> &lt;span class="p">!=&lt;/span> &lt;span class="m">0&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">||&lt;/span> &lt;span class="n">frontierUtc&lt;/span> &lt;span class="p">&amp;gt;=&lt;/span> &lt;span class="n">nextEmit&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">yield&lt;/span> &lt;span class="k">return&lt;/span> &lt;span class="n">timeSlice&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="c1">// &amp;lt;--- Return the TimeSlice !&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">nextEmit&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">frontierUtc&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">RoundDown&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Time&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OneSecond&lt;/span>&lt;span class="p">).&lt;/span>&lt;span class="n">Add&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Time&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">OneSecond&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>What I don&amp;rsquo;t fully understand is the use of &lt;code>System.Threading.ManualResetEventSlim&lt;/code> class (&lt;code>_newLiveDataEmitted&lt;/code> variable) to wait for a new live data, in case the loop is running within the same second and the &lt;code>_newLiveDataEmitted&lt;/code> is not set.&lt;/p>
+&lt;ul>
+&lt;li>Why the need to check if the loop is running within the same second?&lt;/li>
+&lt;li>Why not just always &lt;code>Wait()&lt;/code>?&lt;/li>
+&lt;li>Is this somehting that tries to avoid busy spinning?&lt;/li>
+&lt;/ul>
+&lt;p>As a side note, &lt;code>ManualResetEventSlim&lt;/code> has better performance than &lt;code>ManualResetEvent&lt;/code> when wait times are expected to be very short, as it uses busy spinning for a short time.&lt;/p>
+&lt;br>
+&lt;h2 id="4-data-feed">4) Data Feed&lt;/h2>
+&lt;p>The &lt;code>LiveTradingDataFeed&lt;/code> class creates an enumerator that is used in the &lt;code>StreamData(...)&lt;/code> function of the &lt;code>LiveSynchronizer&lt;/code> class above. There is a chain of function calls but finally it delegates the task of enumerator creation to the &lt;code>LiveDataQueue&lt;/code> class, which, when I look up, is empty!&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-csharp" data-lang="csharp">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">public&lt;/span> &lt;span class="k">class&lt;/span> &lt;span class="nc">LiveDataQueue&lt;/span> &lt;span class="p">:&lt;/span> &lt;span class="n">IDataQueueHandler&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kd">public&lt;/span> &lt;span class="n">IEnumerator&lt;/span>&lt;span class="p">&amp;lt;&lt;/span>&lt;span class="n">BaseData&lt;/span>&lt;span class="p">&amp;gt;&lt;/span> &lt;span class="n">Subscribe&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">SubscriptionDataConfig&lt;/span> &lt;span class="n">dataConfig&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">EventHandler&lt;/span> &lt;span class="n">newDataAvailableHandler&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">throw&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="n">NotImplementedException&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Not implemented&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kd">public&lt;/span> &lt;span class="k">virtual&lt;/span> &lt;span class="k">void&lt;/span> &lt;span class="n">Unsubscribe&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">SubscriptionDataConfig&lt;/span> &lt;span class="n">dataConfig&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">throw&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="n">NotImplementedException&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Not implemented&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Returns whether the data provider is connected&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kd">public&lt;/span> &lt;span class="kt">bool&lt;/span> &lt;span class="n">IsConnected&lt;/span> &lt;span class="p">=&amp;gt;&lt;/span> &lt;span class="kc">false&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Performs application-defined tasks associated with freeing,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// releasing, or resetting unmanaged resources.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kd">public&lt;/span> &lt;span class="k">void&lt;/span> &lt;span class="n">Dispose&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>I guess this is typically implemented by connecting to a live data provider or exchange using web sockets or other real-time data streaming mechanisms.&lt;/p>
+&lt;p>Would be interesting to see how this part is implemented in a production environment. Even more interesting would be to understand how HFT firms implement the entire trading engine!&lt;/p>
+&lt;br></description></item><item><title>How Kubernetes CPU Limits Actually Work</title><link>https://witsblog.github.io/post/021_k8s_cpu_limit/</link><pubDate>Sat, 04 Feb 2023 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/021_k8s_cpu_limit/</guid><description>&lt;br>
+&lt;p>In Kubernetes, setting a container CPU limit like &lt;code>cpu: &amp;quot;250m&amp;quot;&lt;/code> or &lt;code>cpu: &amp;quot;2.5&amp;quot;&lt;/code> is common practice.&lt;/p>
+&lt;p>But CPUs are physical hardware execution units—how can it be fractions? What does &lt;code>250m&lt;/code> actually mean? Why do services with low average CPU utilization suffer severe p99 latency spikes?&lt;/p>
+&lt;br>
+&lt;h2 id="requests-vs-limits">Requests vs. Limits&lt;/h2>
+&lt;p>When deploying a container in Kubernetes, we specify resource &lt;code>requests&lt;/code> and &lt;code>limits&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-yaml" data-lang="yaml">&lt;span class="line">&lt;span class="cl">&lt;span class="nt">resources&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">requests&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">memory&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="s2">&amp;#34;256Mi&amp;#34;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">cpu&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="s2">&amp;#34;250m&amp;#34;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">limits&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">memory&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="s2">&amp;#34;768Mi&amp;#34;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">cpu&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="s2">&amp;#34;750m&amp;#34;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/post/021_k8s_cpu_limit/featured.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>Resource&lt;/th>
+&lt;th>&lt;code>request&lt;/code> (Scheduling &amp;amp; Fair Share)&lt;/th>
+&lt;th>&lt;code>limit&lt;/code> (Hard Enforcement)&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>CPU&lt;/td>
+&lt;td>Used by &lt;code>kube-scheduler&lt;/code> to place the Pod without exceeding node capacity. Workloads are allocated CPU time proportionally when the node is contested, but can burst if spare cycles exist.&lt;/td>
+&lt;td>A hard ceiling per &lt;strong>scheduling interval&lt;/strong> enforced by &lt;strong>CFS Bandwidth Control&lt;/strong>. If execution time exceeds the quota within the period, the OS kernel forcefully throttles the threads until the next period.&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>Memory&lt;/td>
+&lt;td>Used by &lt;code>kube-scheduler&lt;/code> during Pod placement to ensure the node has sufficient memory capacity.&lt;/td>
+&lt;td>A hard ceiling via memory cgroup. Exceeding it triggers the Linux kernel OOM (&lt;code>ExitCode 137&lt;/code>).&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;br>
+&lt;h2 id="cfs-bandwidth-control">CFS Bandwidth Control&lt;/h2>
+&lt;p>Kubernetes limits CPU resources using the Linux kernel &lt;a href="https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v1/cgroups.html" target="_blank" rel="noopener">cgroup&lt;/a> mechanism via &lt;a href="https://www.kernel.org/doc/html/latest/scheduler/sched-bwc.html" target="_blank" rel="noopener">CFS Bandwidth Control&lt;/a>. The allowed bandwidth is specified by two parameters: &lt;strong>&lt;code>quota&lt;/code>&lt;/strong> and &lt;strong>&lt;code>period&lt;/code>&lt;/strong>.&lt;/p>
+&lt;ul>
+&lt;li>
+&lt;p>&lt;strong>cgroup v1:&lt;/strong> Located in &lt;code>/sys/fs/cgroup/cpu,cpuacct/&lt;/code> as &lt;code>cpu.cfs_quota_us&lt;/code> and &lt;code>cpu.cfs_period_us&lt;/code>:&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/021/02.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>cgroup v2:&lt;/strong> Located in &lt;code>/sys/fs/cgroup/cpu.max&lt;/code> in &lt;code>&amp;lt;quota&amp;gt; &amp;lt;period&amp;gt;&lt;/code> format:&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/021/03.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;p>Here is how it works:&lt;/p>
+&lt;ul>
+&lt;li>Within each given &lt;strong>period&lt;/strong> (default: &lt;code>100,000 µs&lt;/code> = 100 ms), the cgroup is allocated up to &lt;strong>quota&lt;/strong> of CPU time.&lt;/li>
+&lt;li>The quota is distributed to per-CPU run queues in &lt;strong>slices&lt;/strong> (default: 5 ms via &lt;code>/proc/sys/kernel/sched_cfs_bandwidth_slice_us&lt;/code>) as threads become runnable.&lt;/li>
+&lt;li>If the quota is fully exhausted before the period ends, all threads in that cgroup are throttled and cannot run until the quota replenishes in the next period.&lt;/li>
+&lt;/ul>
+&lt;p>When we specify &lt;code>cpu: &amp;quot;250m&amp;quot;&lt;/code>:
+$$\text{quota} = 0.25 \times 100{,}000 \text{ }\mu\text{s} = 25{,}000 \text{ }\mu\text{s} = 25\text{ ms}$$&lt;/p>
+&lt;p>&lt;mark>This means your container can consume at most 25 ms of CPU runtime every 100 ms period.&lt;/mark>&lt;/p>
+&lt;p>Let&amp;rsquo;s visualize. Assume a single-threaded task requires 125 ms of pure CPU processing time.&lt;/p>
+&lt;ul>
+&lt;li>
+&lt;p>Without CPU limits, the task executes continuously across periods and finishes in ~125 ms:
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/021/04.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>With &lt;code>cpu: &amp;quot;250m&amp;quot;&lt;/code> (25 ms quota per 100 ms period):&lt;/p>
+&lt;ul>
+&lt;li>Period 1: Runs 25 ms $\rightarrow$ Quota exhausted $\rightarrow$ Throttled for 75 ms.&lt;/li>
+&lt;li>Period 2: Runs 25 ms $\rightarrow$ Quota exhausted $\rightarrow$ Throttled for 75 ms.&lt;/li>
+&lt;li>&amp;hellip;&lt;/li>
+&lt;li>Period 5: Completes the remaining 25 ms.&lt;/li>
+&lt;/ul>
+&lt;p>The task finishes at &lt;strong>425 ms&lt;/strong> instead of &lt;strong>125 ms&lt;/strong>—a &lt;mark>3.4x latency degradation&lt;/mark>:&lt;/p>
+&lt;p>
+&lt;figure id="figure-cfs-period-vs-quota-throttling-introduces-300-ms-of-forced-sleep-into-a-125-ms-task">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/021/05.png" alt="CFS period vs quota: throttling introduces 300 ms of forced sleep into a 125 ms task" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+CFS period vs quota: throttling introduces 300 ms of forced sleep into a 125 ms task
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;p>Inspecting &lt;code>/sys/fs/cgroup/cpu/cpu.stat&lt;/code> reveals the damage:&lt;/p>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>Metric&lt;/th>
+&lt;th>Value&lt;/th>
+&lt;th>Description&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>&lt;code>nr_periods&lt;/code>&lt;/td>
+&lt;td>&lt;code>5&lt;/code>&lt;/td>
+&lt;td>Number of intervals that have elapsed.&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;code>nr_throttled&lt;/code>&lt;/td>
+&lt;td>&lt;code>4&lt;/code>&lt;/td>
+&lt;td>Number of times the group has been throttled.&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;code>throttled_time&lt;/code>&lt;/td>
+&lt;td>&lt;code>300,000 µs&lt;/code>&lt;/td>
+&lt;td>The total time duration for which the group have been throttled.&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;p>$$\text{Throttled Rate} = \frac{\text{nr_throttled}}{\text{nr_periods}} = \frac{4}{5} = 80%$$&lt;/p>
+&lt;br>
+&lt;h2 id="multi-core-trap">Multi-Core Trap&lt;/h2>
+&lt;blockquote>
+&lt;p>What if CPU &lt;code>limit&lt;/code> &amp;gt; 1? This means &lt;code>quota&lt;/code> &amp;gt; &lt;code>period&lt;/code>. Will it still be throttled?&lt;/p>
+&lt;/blockquote>
+&lt;p>Real systems run multiple CPU cores. The Linux kernel tracks the quota from the &lt;strong>global pool&lt;/strong> for the cgroup, rather than on a per-CPU basis. So even though the time used in each period per CPU core cannot exceed the &lt;code>period&lt;/code> itself, the total sum of &lt;code>quota&lt;/code> across multiple cores can be greater than the period. This can result in throttling.&lt;/p>
+&lt;p>For example, if we set &lt;code>cpu: &amp;quot;2&amp;quot;&lt;/code> (quota = 200 ms per 100 ms period) on an 8-core machine, and the application spawns 4 worker threads running simultaneously:&lt;/p>
+&lt;p>$$\text{Burn Rate} = 4 \text{ threads} \times 50\text{ ms} = 200\text{ ms CPU time}$$&lt;/p>
+&lt;p>The entire 200 ms quota is depleted in &lt;strong>the first 50 ms&lt;/strong> of the period. For the remaining 50 ms, all 4 threads are throttled simultaneously.&lt;/p>
+&lt;br>
+&lt;h2 id="linux-kernel-cfs-code">Linux Kernel CFS Code&lt;/h2>
+&lt;p>Looking at the Linux kernel scheduler source reveals the exact mechanisms.&lt;/p>
+&lt;h3 id="1-slice-from-the-global-pool">1. Slice from the global pool&lt;/h3>
+&lt;p>Runqueues (&lt;code>cfs_rq&lt;/code>) allocate runtime in a batch fashion (5 ms default slice):&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="line">&lt;span class="cl">&lt;span class="k">static&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="nf">__assign_cfs_rq_runtime&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">struct&lt;/span> &lt;span class="n">cfs_bandwidth&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">cfs_b&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">struct&lt;/span> &lt;span class="n">cfs_rq&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">cfs_rq&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">u64&lt;/span> &lt;span class="n">target_runtime&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">u64&lt;/span> &lt;span class="n">min_amount&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">amount&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="nf">lockdep_assert_held&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">cfs_b&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">lock&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">min_amount&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">target_runtime&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="n">cfs_rq&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">runtime_remaining&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">cfs_b&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">quota&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">RUNTIME_INF&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">amount&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">min_amount&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">else&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="nf">start_cfs_bandwidth&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cfs_b&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">cfs_b&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">runtime&lt;/span> &lt;span class="o">&amp;gt;&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">amount&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nf">min&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cfs_b&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">runtime&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">min_amount&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">cfs_b&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">runtime&lt;/span> &lt;span class="o">-=&lt;/span> &lt;span class="n">amount&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="c1">// &amp;lt;---------- Take from the global pool
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">cfs_b&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">idle&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">cfs_rq&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">runtime_remaining&lt;/span> &lt;span class="o">+=&lt;/span> &lt;span class="n">amount&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="n">cfs_rq&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">runtime_remaining&lt;/span> &lt;span class="o">&amp;gt;&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>To protect the global quota pool across multiple physical cores, the kernel guards runtime assignment with a spinlock:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="line">&lt;span class="cl">&lt;span class="k">static&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="nf">assign_cfs_rq_runtime&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">struct&lt;/span> &lt;span class="n">cfs_rq&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">cfs_rq&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">struct&lt;/span> &lt;span class="n">cfs_bandwidth&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">cfs_b&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nf">tg_cfs_bandwidth&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cfs_rq&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">tg&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">int&lt;/span> &lt;span class="n">ret&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="nf">raw_spin_lock&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">cfs_b&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">lock&lt;/span>&lt;span class="p">);&lt;/span> &lt;span class="cm">/* Acquire global cgroup spinlock */&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">ret&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nf">__assign_cfs_rq_runtime&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cfs_b&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">cfs_rq&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nf">sched_cfs_bandwidth_slice&lt;/span>&lt;span class="p">());&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="nf">raw_spin_unlock&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">cfs_b&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">lock&lt;/span>&lt;span class="p">);&lt;/span> &lt;span class="cm">/* Release global spinlock */&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="n">ret&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="2-returning-unused-slice">2. Returning unused slice&lt;/h3>
+&lt;p>When a thread goes to sleep or becomes unrunnable, unused slice time is returned to the global pool to prevent quota starvation across cores:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="line">&lt;span class="cl">&lt;span class="k">static&lt;/span> &lt;span class="kt">void&lt;/span> &lt;span class="nf">__return_cfs_rq_runtime&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">struct&lt;/span> &lt;span class="n">cfs_rq&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">cfs_rq&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">struct&lt;/span> &lt;span class="n">cfs_bandwidth&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">cfs_b&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nf">tg_cfs_bandwidth&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cfs_rq&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">tg&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">s64&lt;/span> &lt;span class="n">slack_runtime&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">cfs_rq&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">runtime_remaining&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="n">min_cfs_rq_runtime&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">slack_runtime&lt;/span> &lt;span class="o">&amp;lt;=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="nf">raw_spin_lock&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">cfs_b&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">lock&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">cfs_b&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">quota&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">RUNTIME_INF&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">cfs_b&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">runtime&lt;/span> &lt;span class="o">+=&lt;/span> &lt;span class="n">slack_runtime&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="cm">/* Return unused slice to global pool */&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="cm">/* If quota is replenished, defer unthrottling via high-resolution timer */&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="cm">/* we are under rq-&amp;gt;lock, defer unthrottling using a timer */&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">cfs_b&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">runtime&lt;/span> &lt;span class="o">&amp;gt;&lt;/span> &lt;span class="nf">sched_cfs_bandwidth_slice&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="o">&amp;amp;&amp;amp;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">!&lt;/span>&lt;span class="nf">list_empty&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">cfs_b&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">throttled_cfs_rq&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="nf">start_cfs_slack_bandwidth&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cfs_b&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="nf">raw_spin_unlock&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">cfs_b&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">lock&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="cm">/* even if it&amp;#39;s not valid for return we don&amp;#39;t want to try again */&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">cfs_rq&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">runtime_remaining&lt;/span> &lt;span class="o">-=&lt;/span> &lt;span class="n">slack_runtime&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="a-side-note-about-spinlock">A Side Note About Spinlock&lt;/h3>
+&lt;p>What&amp;rsquo;s intersting while reading the kernel code is the heavy usage of &lt;code>raw_spin_lock(&amp;amp;cfs_b-&amp;gt;lock)&lt;/code>. Unlike &lt;strong>mutex locks&lt;/strong>, which put the waiting thread to sleep, &lt;strong>spinlocks&lt;/strong> make the thread continuously &amp;ldquo;spin&amp;rdquo; until the lock is available. This approach is efficient where critical sections are expected to be short as it avoids the overhead of sleeping and waking threads.&lt;/p>
+&lt;br>
+&lt;h2 id="should-we-set-cpu-limits">Should We Set CPU Limits?&lt;/h2>
+&lt;br>
+&lt;blockquote class="twitter-tweet">&lt;p lang="en" dir="ltr">This is why I always advise:&lt;br>&lt;br>1) Always set memory limit == request&lt;br>2) Never set CPU limit&lt;br>&lt;br>(for locally adjusted values of &amp;quot;always&amp;quot; and &amp;quot;never&amp;quot;)&lt;/p>&amp;mdash; Tim Hockin (thockin.yaml) (@thockin) &lt;a href="https://x.com/thockin/status/1134193838841401345?ref_src=twsrc%5Etfw">May 30, 2019&lt;/a>&lt;/blockquote>
+&lt;script async src="https://platform.x.com/widgets.js" charset="utf-8">&lt;/script>
+&lt;br>
+&lt;p>I think there is no one-size-fits-all answer. The decision comes down to latency vs. multi-tenant isolation:&lt;/p>
+&lt;h3 id="when-to-omit-cpu-limits">When to omit CPU Limits&lt;/h3>
+&lt;ul>
+&lt;li>Low-latency services: Where p99 latency matters. Rely on &lt;code>requests&lt;/code> to guarantee scheduling headroom and let idle nodes absorb bursty traffic without artificial throttling.&lt;/li>
+&lt;/ul>
+&lt;h3 id="when-to-set-cpu-limits">When to set CPU Limits&lt;/h3>
+&lt;ul>
+&lt;li>Shared clusters: Preventing misconfigured workload from starving other containers on the same node.&lt;/li>
+&lt;li>Load testing: Ensuring performance benchmarks are deterministic across runs.&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="learnings">Learnings&lt;/h2>
+&lt;ul>
+&lt;li>Fractional CPUs are time slices, not hardware allocations.&lt;/li>
+&lt;li>CPU limits can cause latency spikes. An application with 20% average CPU can still experience 80% throttling if it consumes quota in short.&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>&lt;a href="https://kubernetes.io/docs/concepts/configuration/manage-resources-containers" target="_blank" rel="noopener">https://kubernetes.io/docs/concepts/configuration/manage-resources-containers&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v1/cgroups.html" target="_blank" rel="noopener">https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v1/cgroups.html&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://github.com/torvalds/linux" target="_blank" rel="noopener">https://github.com/torvalds/linux&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://www.reddit.com/r/kubernetes/comments/wgztqh/for_the_love_of_god_stop_using_cpu_limits_on/?rdt=51634" target="_blank" rel="noopener">https://www.reddit.com/r/kubernetes/comments/wgztqh/for_the_love_of_god_stop_using_cpu_limits_on/?rdt=51634&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://www.reddit.com/r/kubernetes/comments/12he7aa/cpu_limits/" target="_blank" rel="noopener">https://www.reddit.com/r/kubernetes/comments/12he7aa/cpu_limits/&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>Accelerating Performance with CUDA!</title><link>https://witsblog.github.io/post/006_cuda_basic/</link><pubDate>Fri, 12 Mar 2021 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/006_cuda_basic/</guid><description/></item></channel></rss>

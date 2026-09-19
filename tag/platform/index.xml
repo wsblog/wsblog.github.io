@@ -1,0 +1,416 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Platform | Wit's Blog</title><link>https://witsblog.github.io/tag/platform/</link><atom:link href="https://witsblog.github.io/tag/platform/index.xml" rel="self" type="application/rss+xml"/><description>Platform</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-us</language><lastBuildDate>Fri, 26 Jun 2026 00:00:00 +0700</lastBuildDate><image><url>https://witsblog.github.io/media/icon_hu66cf44b0d2eab4dae9de00f68d847da7_1567_512x512_fill_lanczos_center_3.png</url><title>Platform</title><link>https://witsblog.github.io/tag/platform/</link></image><item><title>Data Pipeline Observability</title><link>https://witsblog.github.io/post/073_data_monitoring/</link><pubDate>Fri, 26 Jun 2026 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/073_data_monitoring/</guid><description>&lt;br>
+&lt;h2 id="the-question">The Question&lt;/h2>
+&lt;p>Thousands of data pipelines. Sooner or later, someone has to answer:&lt;/p>
+&lt;blockquote>
+&lt;p>For every job, how much data did this run touch, how long did it take, how much did it cost — and how does that compare to yesterday, last week, last month?&lt;/p>
+&lt;/blockquote>
+&lt;p>Sounds boring. But it&amp;rsquo;s also the highest-leverage question a platform team can answer: almost every silent pipeline failure shows up first as a change in one of those numbers.&lt;/p>
+&lt;br>
+&lt;h2 id="mapping-sre-golden-signals-to-data-pipelines">Mapping SRE Golden Signals to Data Pipelines&lt;/h2>
+&lt;p>Google&amp;rsquo;s &lt;a href="https://sre.google/sre-book/monitoring-distributed-systems/" target="_blank" rel="noopener">SRE framework&lt;/a> defines &lt;strong>Errors&lt;/strong>, &lt;strong>Traffic&lt;/strong>, &lt;strong>Latency&lt;/strong>, and &lt;strong>Saturation&lt;/strong> as the foundational metrics for system health.&lt;/p>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>Signal&lt;/th>
+&lt;th>Data Pipeline Equivalent&lt;/th>
+&lt;th>What It Catches&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>Errors&lt;/td>
+&lt;td>Task failures &amp;amp; retries&lt;/td>
+&lt;td>Crashes, OOMs&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>Traffic&lt;/td>
+&lt;td>Rows &amp;amp; bytes (read / written)&lt;/td>
+&lt;td>Volume anomalies, silent drops, and partial writes&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>Latency&lt;/td>
+&lt;td>Stage &amp;amp; job runtime&lt;/td>
+&lt;td>SLA breaches, data surges, and join skew&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>Saturation&lt;/td>
+&lt;td>CPU, Memory spill, JVM GC&lt;/td>
+&lt;td>Executor starvation and memory pressure&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;h3 id="1-errors">1) Errors&lt;/h3>
+&lt;blockquote>
+&lt;p>&lt;em>&amp;ldquo;the rate of requests that fail.&amp;rdquo;&lt;/em>&lt;/p>
+&lt;/blockquote>
+&lt;p>In data pipelines, the common trap is relying solely on orchestrator exit codes. A Spark job can exit &lt;code>0&lt;/code> while hundreds of tasks fail and retry under the hood.&lt;/p>
+&lt;p>Example metrics:&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>failedTasksCount&lt;/code> &amp;amp; &lt;code>taskFailureRate&lt;/code>: Categorized by reason (&lt;code>ExceptionFailure&lt;/code>, &lt;code>FetchFailed&lt;/code>, &lt;code>ExecutorLostFailure&lt;/code>).&lt;/li>
+&lt;/ul>
+&lt;h3 id="2-traffic">2) Traffic&lt;/h3>
+&lt;blockquote>
+&lt;p>&lt;em>&amp;ldquo;a measure of how much demand is being placed on your system.&amp;rdquo;&lt;/em>&lt;/p>
+&lt;/blockquote>
+&lt;p>For pipelines, demand is data throughput—rows and bytes in and out, tagged by source, direction, and user.&lt;/p>
+&lt;p>Example metrics:&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>inputBytesRead&lt;/code> &amp;amp; &lt;code>inputRecordsRead&lt;/code>: Volume per input scan (S3, Kafka, Delta, Iceberg).&lt;/li>
+&lt;li>&lt;code>outputBytesWritten&lt;/code> &amp;amp; &lt;code>outputRecordsWritten&lt;/code>: Volume delivered to destination sinks.&lt;/li>
+&lt;li>&lt;code>volumeAnomalyRatio&lt;/code>: Run-over-run record count vs. a rolling 7-day baseline.&lt;/li>
+&lt;/ul>
+&lt;h3 id="3-latency">3) Latency&lt;/h3>
+&lt;blockquote>
+&lt;p>&lt;em>&amp;ldquo;the time it takes to service a request,&amp;rdquo;&lt;/em> tracked in percentiles rather than simple averages.&lt;/p>
+&lt;/blockquote>
+&lt;p>For pipelines, it&amp;rsquo;s total runtime against business SLAs. But high-level duration only becomes actionable when decomposed.&lt;/p>
+&lt;p>Example metrics:&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>jobDurationMs&lt;/code> &amp;amp; &lt;code>stageDurationMs&lt;/code>: Wall-clock runtimes per job and stage.&lt;/li>
+&lt;li>&lt;code>taskSkewRatio&lt;/code> (&lt;code>maxTaskDuration / p50TaskDuration&lt;/code>): Direct indicator of data skew.&lt;/li>
+&lt;/ul>
+&lt;h3 id="4-saturation">4) Saturation&lt;/h3>
+&lt;blockquote>
+&lt;p>&lt;em>&amp;ldquo;how full your service is, emphasizing the resources that are most constrained.&amp;rdquo;&lt;/em>&lt;/p>
+&lt;/blockquote>
+&lt;p>For Spark, this measures executor CPU, JVM memory, disk I/O, and network limits.&lt;/p>
+&lt;p>Pipelines rarely fail cold; they saturate first. An executor running out of memory doesn&amp;rsquo;t crash immediately—it thrashes in GC, spills shuffle partitions to disk before finally throwing an OOM.&lt;/p>
+&lt;p>Example metrics:&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>jvmGCTime&lt;/code> &amp;amp; &lt;code>jvmGCRatio&lt;/code> (&lt;code>jvmGCTime / executorRunTime&lt;/code>): Time spent in garbage collection. &amp;gt;10% signals severe memory pressure.&lt;/li>
+&lt;li>&lt;code>memorySpillBytes&lt;/code> &amp;amp; &lt;code>diskSpillBytes&lt;/code>: Shuffle data that couldn&amp;rsquo;t fit in execution memory and spilled to local disk.&lt;/li>
+&lt;li>&lt;code>executorCpuTime&lt;/code> vs &lt;code>executorRunTime&lt;/code>: Low ratio indicates tasks blocked on I/O wait (S3 throttling, network shuffle, slow databases).&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="how-to-monitor-across-teams">How to Monitor Across Teams&lt;/h2>
+&lt;p>Take traffic as an example. The two obvious approaches both fail.&lt;/p>
+&lt;h3 id="anti-pattern-1-cron-queries">Anti-Pattern 1: Cron Queries&lt;/h3>
+&lt;p>The naive answer: running scheduled job &lt;code>SELECT COUNT(*), SUM(&amp;lt;byte_size&amp;gt;) FROM &amp;lt;table&amp;gt;&lt;/code> against every table we care about.&lt;/p>
+&lt;ul>
+&lt;li>&lt;mark>Doesn&amp;rsquo;t scale to thousands of tables.&lt;/mark> Every new table is one more entry to maintain.&lt;/li>
+&lt;li>&lt;mark>Costs.&lt;/mark> Scans entire datasets periodically. That bill isn&amp;rsquo;t free.&lt;/li>
+&lt;li>&lt;mark>Not real-time.&lt;/mark> By the time the cron queries run, the upstream job finished hours ago.&lt;/li>
+&lt;li>&lt;mark>Lack of Attribution.&lt;/mark> A row count reported doesn&amp;rsquo;t tell &lt;em>which job&lt;/em> produced those rows or &lt;em>what it read&lt;/em> to produce them.&lt;/li>
+&lt;/ul>
+&lt;h3 id="anti-pattern-2-user-land-application-hooks">Anti-Pattern 2: User-Land Application Hooks&lt;/h3>
+&lt;p>The other obvious answer: push instrumentation down to the user, requiring application developers to explicitly instrument code (e.g., calling df.count() prior to writes)&lt;/p>
+&lt;ul>
+&lt;li>&lt;mark>Optional instrumentation is forgotten instrumentation.&lt;/mark> In a platform with hundreds of contributors, &amp;ldquo;every team should remember to do X&amp;rdquo; is a hope, not a strategy.&lt;/li>
+&lt;li>&lt;mark>&lt;code>df.count()&lt;/code> isn&amp;rsquo;t free.&lt;/mark> It forces an additional materialization pass over the lineage graph unless cached. Now we&amp;rsquo;re asking every user to think about caching too, which they&amp;rsquo;ll get wrong.&lt;/li>
+&lt;li>&lt;mark>Governance Friction.&lt;/mark> Two teams tag their metrics differently and we can&amp;rsquo;t compare them.&lt;/li>
+&lt;/ul>
+&lt;p>Both fail for the same reason: they push observability work onto the platform&amp;rsquo;s users, instead of making it a property of the platform.&lt;/p>
+&lt;br>
+&lt;h2 id="what-i-built-the-telemetry-library">What I Built: The Telemetry Library&lt;/h2>
+&lt;p>The library takes a different approach: it hooks directly into Spark&amp;rsquo;s runtime internals to collect telemetry as jobs execute—throughput, stage runtimes, GC pauses, memory spill, and task execution profiles.&lt;/p>
+&lt;p>Integration is a single registration at application startup:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">implicit&lt;/span> &lt;span class="k">val&lt;/span> &lt;span class="n">spark&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">SparkSession&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nc">SparkSession&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">builder&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">.&lt;/span>&lt;span class="n">appName&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="s">&amp;#34;my-job&amp;#34;&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">.&lt;/span>&lt;span class="n">getOrCreate&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">val&lt;/span> &lt;span class="n">observability&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="nc">PlatformObservability&lt;/span>&lt;span class="o">(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">metricPrefix&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="s">&amp;#34;platform.spark.observability&amp;#34;&lt;/span>&lt;span class="o">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">)(&lt;/span>&lt;span class="n">spark&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">observability&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">register&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>What does an application team actually get?&lt;/p>
+&lt;ul>
+&lt;li>&lt;mark>One line of code.&lt;/mark> Register once at session initialization; zero pipeline refactoring.&lt;/li>
+&lt;li>&lt;mark>Zero compute overhead.&lt;/mark> Extracted from Spark runtime internals—no trigger queries, no re-computations, no extra cloud spend.&lt;/li>
+&lt;li>&lt;mark>Standardized org-wide.&lt;/mark> Consistent metrics and tags across hundreds of pipelines.&lt;/li>
+&lt;/ul>
+&lt;p>Metrics are pushed asynchronously to a metrics gateway and visualized in Grafana, backing automated anomaly detection and team dashboards.&lt;/p>
+&lt;p>
+&lt;figure id="figure-latency-plotted-alongside-traffic-a-real-slowdown-that-turned-out-to-be-data-driven-not-a-cluster-issue">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/073/01.png" alt="Latency plotted alongside traffic. A real slowdown that turned out to be data-driven, not a cluster issue" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Latency plotted alongside traffic. A real slowdown that turned out to be data-driven, not a cluster issue
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h3 id="beyond-monitoring-optimization-hints">Beyond Monitoring: Optimization Hints&lt;/h3>
+&lt;p>The library also flags redundant work: if the same DataFrame is recomputed without an intervening &lt;code>.cache()&lt;/code> or &lt;code>.persist()&lt;/code>, it emits a warning. Catching duplicate compute directly on the dashboard gives engineers immediate, actionable cost wins.&lt;/p>
+&lt;br>
+&lt;h2 id="the-result-a-real-incident">The Result: A Real Incident&lt;/h2>
+&lt;p>A daily pipeline once finished completely green—exit code zero, all stages succeeded, alerts silent—but had written only ~40% of its usual rows due to an upstream feed degradation. The data team didn&amp;rsquo;t catch it; a business user did, hours later, when revenue dashboards dropped.&lt;/p>
+&lt;p>The library catches that class of silent failure immediately: the moment output volume drops below its rolling baseline, an alert fires before downstream consumers read incomplete data.&lt;/p>
+&lt;br>
+&lt;h2 id="notes-platform-vs-domain-metrics">Notes: Platform vs. Domain Metrics&lt;/h2>
+&lt;p>The Four Golden Signals answer: &lt;mark>Did the pipeline run healthily and efficiently?&lt;/mark>&lt;br>
+They cannot answer: &lt;mark>Is the data mathematically and logically correct?&lt;/mark>&lt;/p>
+&lt;p>Domain integrity—such as financial reconciliation, or value ranges—still belongs in application-level assertions.&lt;/p>
+&lt;br>
+&lt;h2 id="whats-next">What&amp;rsquo;s Next&lt;/h2>
+&lt;ul>
+&lt;li>&lt;strong>Freshness &amp;amp; SLA:&lt;/strong> Data is landing on time and isn&amp;rsquo;t stale.&lt;/li>
+&lt;li>&lt;strong>Data Quality:&lt;/strong> Null values, value ranges, referential integrity, etc.&lt;/li>
+&lt;li>&lt;strong>Lineage:&lt;/strong> Shipping captured source/sink metadata to a catalog layer (OpenLineage, Unity Catalog) to map cross-pipeline dependencies.&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>&lt;a href="https://sre.google/sre-book/monitoring-distributed-systems/" target="_blank" rel="noopener">Monitoring Distributed Systems — Google SRE Book, Chapter 6 (Four Golden Signals)&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>Building an MLOps Velocity Tool</title><link>https://witsblog.github.io/post/045_mlops_velocity/</link><pubDate>Wed, 27 Mar 2024 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/045_mlops_velocity/</guid><description>&lt;h2 id="ml-pipeline-automation">ML Pipeline Automation&lt;/h2>
+&lt;p>Google&amp;rsquo;s &lt;a href="https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning" target="_blank" rel="noopener">MLOps maturity model&lt;/a> is a useful starting point. It defines three levels — manual experimentation, partial pipeline automation, and full CI/CD/CT for ML.&lt;/p>
+&lt;p>
+&lt;figure id="figure-level-0--manual-training-and-deployment">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/045/01.svg" alt="Level 0 — manual training and deployment" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Level 0 — manual training and deployment
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure id="figure-level-2--full-ml-cicdct-pipeline">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/045/03.svg" alt="Level 2 — full ML CI/CD/CT pipeline" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Level 2 — full ML CI/CD/CT pipeline
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;p>These diagrams describe an ideal. Real teams have to decide which parts matter most, and where they&amp;rsquo;re willing to diverge.&lt;/p>
+&lt;h2 id="where-our-team-sits-and-where-we-diverged">Where Our Team Sits, and Where We Diverged&lt;/h2>
+&lt;p>Our pipeline maps closely to Google&amp;rsquo;s level 2, but we diverged in two places that mattered:&lt;/p>
+&lt;ol>
+&lt;li>&lt;strong>A custom Velocity Tool, not a generic platform.&lt;/strong>
+&lt;ul>
+&lt;li>Ours targets a specific shape of work: an optimization problem where most wins come from iterating on &lt;em>features&lt;/em>, not from swapping out model architectures. A data scientist — or a business user with a feature idea — can take a candidate from &amp;ldquo;SQL in a notebook&amp;rdquo; to &amp;ldquo;running in production traffic&amp;rdquo; without writing pipeline glue.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>In-process inference, not a separate serving cluster.&lt;/strong>
+&lt;ul>
+&lt;li>Most reference architectures spin up a dedicated model-serving cluster. For our latency budget, that was the wrong trade-off, so inference runs inside the same backend process that serves the request. The price is tighter coupling between the model runtime and the application; the gain is a meaningful latency improvement.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;h2 id="the-velocity-tool">The Velocity Tool&lt;/h2>
+&lt;p>The Velocity Tool reframes model development as a &lt;em>declarative&lt;/em> problem. The user describes the experiment they want — a feature, its source, its evaluation context — and the platform handles the rest: data prep, training, backtesting, packaging, and registering the result for review.&lt;/p>
+&lt;p>Each experiment is a DAG of containerized steps, parameterized by a single spec. Roughly:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-yaml" data-lang="yaml">&lt;span class="line">&lt;span class="cl">&lt;span class="nt">experiment&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">feature&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">name&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">my_new_signal&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">source_sql&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">|&lt;/span>&lt;span class="sd">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="sd"> SELECT entity_id, value
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="sd"> FROM raw.events
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="sd"> WHERE event_date = &amp;#39;${datadate}&amp;#39;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">dtype&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">numeric&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">default&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="m">0.0&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">base_dataset&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">weekly_baseline&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">evaluation&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">business_metrics&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="l">primary_metric, guardrail_metric]&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">backtest_window&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">28d&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">promotion_policy&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">requires_human_approval&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>That&amp;rsquo;s the entire surface area a user has to learn. Behind it: a Spark feature build, a training step that produces a versioned artifact, an evaluation step enforcing shared business metrics, and lineage captured for audit. Experiments run in parallel, scheduled by the platform.&lt;/p>
+&lt;h2 id="the-extended-lifecycle-sandbox-and-ab-before-production">The Extended Lifecycle: Sandbox and A/B Before Production&lt;/h2>
+&lt;p>A good backtest number means very little on its own. Backtests can lie about live behaviour, and a model can be statistically &amp;ldquo;better&amp;rdquo; while still violating a business rule no one wrote down. So the pipeline has two stages between training and production:&lt;/p>
+&lt;ol>
+&lt;li>&lt;strong>Sandbox&lt;/strong>
+&lt;ul>
+&lt;li>A model that passed evaluation is replayed against production data, with platform-enforced checks on the output. The point is to fail loudly on what backtests miss — broken feature assumptions, silent regressions on a data segment that matters.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>A/B Experimentation&lt;/strong>
+&lt;ul>
+&lt;li>Model from the sandbox is then deployed in production, running with a real traffic behind a controlled experiment. The user gets the same business-metric report as in training, now computed against real customer behaviour.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/045/04.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>Promotion is a human decision, but its &lt;em>mechanics&lt;/em> are fully automated. No &amp;ldquo;rebuild the artifact for production&amp;rdquo; step, no rewritten glue code. The artifact that won in A/B is the artifact that runs in production. Removing that gap closes off a long list of &amp;ldquo;almost the same code, but not quite&amp;rdquo; bugs.&lt;/p>
+&lt;h2 id="the-hard-part-knowing-its-still-working">The Hard Part: Knowing It&amp;rsquo;s Still Working&lt;/h2>
+&lt;p>Detecting that a deployed model has quietly stopped doing its job is the unsolved problem of MLOps. Three regimes, not equally hard:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>Labels are direct or cheap.&lt;/strong> Sample outputs, label them, measure performance. Solvable.&lt;/li>
+&lt;li>&lt;strong>Labels are absent or biased.&lt;/strong> Pick a proxy metric that correlates with what you care about and monitor that — knowing the proxy will eventually drift, and you&amp;rsquo;ll have to revisit it.&lt;/li>
+&lt;li>&lt;strong>The problem is reinforcement-shaped.&lt;/strong> The model&amp;rsquo;s own actions change the data it sees, so &amp;ldquo;compare prediction to ground truth&amp;rdquo; doesn&amp;rsquo;t apply. Monitoring becomes distributions, business outcomes, and counterfactuals rather than accuracy.&lt;/li>
+&lt;/ul>
+&lt;p>Most of our production models live in the latter two regimes. A model that sets a price in a live marketplace, for example, never gets to observe what the &lt;em>optimal&lt;/em> price would have been — only the outcome at the price it actually showed. The label we want is structurally unobservable, and monitoring this class of system well is one of the challenging problems in MLOps.&lt;/p>
+&lt;h2 id="retrospective">Retrospective&lt;/h2>
+&lt;p>Things from building this that I keep coming back to:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>The spec is the product.&lt;/strong> The declarative thing a user fills in &lt;em>is&lt;/em> the product. The orchestrator, storage layout, and training runtime underneath are implementation details and should be replaceable without breaking that contract.&lt;/li>
+&lt;li>&lt;strong>Standardize the workflow&lt;/strong> The platform has strong opinions about the &lt;em>shape&lt;/em> of an experiment — the spec format, the metrics, the promotion path — and stays out of the way of what goes inside it. That trade is what makes it safe for non-engineers to ship without the platform feeling restrictive.&lt;/li>
+&lt;li>&lt;strong>Observability belongs inside the pipeline.&lt;/strong> Lineage, freshness, volume, and distribution drift are first-class outputs of every run, not a separate dashboard you build afterwards.&lt;/li>
+&lt;li>&lt;strong>Cost should be visible to whoever decides what to run.&lt;/strong> A platform that runs hundreds of experiments a week needs to expose per-run cost to its users, not just track it internally.&lt;/li>
+&lt;/ul>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>&lt;a href="https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning" target="_blank" rel="noopener">MLOps: Continuous delivery and automation pipelines in machine learning — Google Cloud&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://aws.amazon.com/what-is/mlops/" target="_blank" rel="noopener">What is MLOps? — AWS&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>Pricing Experimentation</title><link>https://witsblog.github.io/post/038_pricing_experiment/</link><pubDate>Sat, 13 Jan 2024 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/038_pricing_experiment/</guid><description>&lt;p>In the world of e-commerce, hundreds of pricing strategies or campaigns are being run simultaneously. But how do these campaigns get validated and tested before rolling out to the users? &amp;ndash; &lt;strong>Experimentation&lt;/strong>&lt;/p>
+&lt;p>Experimentation allows teams to test and validate ideas quickly, from frontend changes to backend logic changes. It allows us to experiment with different variables and measure their impact.&lt;/p>
+&lt;p>In this blog post, let&amp;rsquo;s take &amp;ldquo;pricing strategies&amp;rdquo; as an example.&lt;/p>
+&lt;br>
+&lt;h2 id="requirements">Requirements&lt;/h2>
+&lt;ul>
+&lt;li>Business users should be able to create and manage pricing campaigns.&lt;/li>
+&lt;li>Campaigns should target specific user segments (e.g., mobile users, users from specific regions).&lt;/li>
+&lt;li>The campaign &amp;amp; experimentation process needs an approval process.&lt;/li>
+&lt;li>Real-time monitoring is crucial to pause campaigns if negative impacts are detected.&lt;/li>
+&lt;/ul>
+&lt;p>&lt;strong>Functional Requirements&lt;/strong>&lt;/p>
+&lt;ul>
+&lt;li>Internal UI tool for managing campaigns &amp;amp; experiments.&lt;/li>
+&lt;li>Support for tartgeting user segments.&lt;/li>
+&lt;li>Support different types of allocation strategies (e.g., by user ID, device ID, or time-based).&lt;/li>
+&lt;li>Real-time data collection, monitoring, and analysis.&lt;/li>
+&lt;/ul>
+&lt;p>&lt;strong>Non-functional Requirements&lt;/strong>&lt;/p>
+&lt;ul>
+&lt;li>Scalability to handle large data sets and high traffic.&lt;/li>
+&lt;li>High availability.
+&lt;ul>
+&lt;li>The platform must remain operational, as downtime could disrupt the variant allocation process and skew analysis results.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>Low latency for real-time response&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="campaigns-allocation--experimentation">Campaigns, Allocation, &amp;amp; Experimentation&lt;/h2>
+&lt;p>Campaign is usually a business rule (or it can be a machine learning model rule) that applies certain pricing strategies. The campaign should be able to target specific user segments, for example, users from mobile device, users browsing from Singapore, etc.&lt;/p>
+&lt;p>In A/B testing, we create an experiment with 2 groups (&lt;strong>variants&lt;/strong>):&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>Control group&lt;/strong> (A)
+&lt;ul>
+&lt;li>This group experiences the standard behavior, as same as others not targetted by the experiment.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>Experimental group&lt;/strong> (B)
+&lt;ul>
+&lt;li>This group experiences a special treatment.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ul>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/038/01.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>By comparing business metrics across both groups, we can assess the experiment&amp;rsquo;s impact.&lt;/p>
+&lt;p>But how do we assign users to variants? This process is called &lt;strong>allocation&lt;/strong>. Given an incoming request with context information, we assign the request to either variant A or B. Depending on the experiment’s needs, different &lt;strong>allocation strategy&lt;/strong> can be used.&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/038/02.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h2 id="high-level-architecture">High-Level Architecture&lt;/h2>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/post/038_pricing_experiment/featured.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h2 id="integrating-experiments-in-the-code">Integrating Experiments in the Code&lt;/h2>
+&lt;p>To integrate an experiment in the code, it typically looks like this:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-python" data-lang="python">&lt;span class="line">&lt;span class="cl">&lt;span class="n">request&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="c1"># ...&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">ctx&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">get_context&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">request&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="c1"># Get additional contexts&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">if&lt;/span> &lt;span class="n">other_condition&lt;/span> &lt;span class="ow">and&lt;/span> &lt;span class="n">experiment_client&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">determine_variant&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">ctx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s2">&amp;#34;EXPERIMENT-ID&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="s2">&amp;#34;B&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">plan_b&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="c1"># B, Experimental group&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">else&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">plan_a&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="c1"># A, Control group&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>However, in pricing strategies where hundreds of campaigns may be running simultaneously, it&amp;rsquo;s a little more complicated than this.&lt;/p>
+&lt;p>When a request comes in, we first need to identify all the relevant experiments the request is part of (within the targeted segment). Once we know the experiments, we can retrieve the associated campaigns and apply the appropriate pricing strategies defined by the campaigns.&lt;/p>
+&lt;p>This typically involves a &lt;strong>rule engine&lt;/strong> that evaluates the request&amp;rsquo;s context to determine the relevant experiments. To maintain real-time performance, heavy &lt;a href="https://witsblog.github.io/post/020_caif/">&lt;strong>caching&lt;/strong>&lt;/a> is required—running the rule engine for every single request would introduce significant latency.&lt;/p>
+&lt;br>
+&lt;h2 id="references">References&lt;/h2>
+&lt;br></description></item><item><title>Detecting Performance Degradation in CI/CD Pipeline</title><link>https://witsblog.github.io/post/033_performance_ci/</link><pubDate>Sat, 16 Dec 2023 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/033_performance_ci/</guid><description>&lt;h2 id="why">Why?&lt;/h2>
+&lt;p>We want to identify any performance degradation before merging code changes into the production environment. Imagine there is a pull request changing some critical logic in the code in a way that increases latency of a backend service by a lot, and this is detected after deployed to the production!&lt;/p>
+&lt;br>
+&lt;h2 id="the-testing-setup">The Testing Setup&lt;/h2>
+&lt;p>So the basic idea of performance regresssion test is to compare the performance between 2 instances of a backend application; 1 from the baseline (curerntly in production build) and another from the candidate build triggered by a pull request (PR) or a merge request (MR).&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/033/01.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>We also want to ensure the fairness of the test, so the baseline and the candidate versions will be deployed in isolated environment. For this, Kubernetes &lt;a href="https://witsblog.github.io/post/020_k8s_cpu_limit/#should-we-set-the-cpu-limit">CPU Limit&lt;/a> can be used.&lt;/p>
+&lt;p>We can also use tools like &lt;a href="https://k6.io/" target="_blank" rel="noopener">k6&lt;/a> to run the performance test.&lt;/p>
+&lt;br>
+&lt;h2 id="the-gitlab-ciyml">The &lt;code>.gitlab-ci.yml&lt;/code>&lt;/h2>
+&lt;br>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-yaml" data-lang="yaml">&lt;span class="line">&lt;span class="cl">&lt;span class="nt">stages&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="l">docker&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="l">manual&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">app_docker&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">docker&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">script&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># Build docker image&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">artifacts&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">paths&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">performance_regression_test&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">manual&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">extends&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">allow_failure&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kc">true&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">needs&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="nt">job&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">app_docker&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">variables&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">trigger&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">include&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="nt">local&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">.ci/pipelinees/performance_test/pipeline.yaml&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">strategy&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">depend&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">resource_group&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-yaml" data-lang="yaml">&lt;span class="line">&lt;span class="cl">&lt;span class="c"># .ci/pipelinees/performance_test/pipeline.yaml&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">stages&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="l">test setup&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c"># Prepare sample requests, build test runner, deploy baseline &amp;amp; candidate to Kubernetes&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="l">perf test&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c"># Run the perf test by firing requests to the baseline &amp;amp; candidate&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="l">cleanup&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c"># Clean up the Kubernetes resource&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="l">analyze&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c"># Analyze the result, &lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">workflow&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">rules&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="nt">if&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">$CI_MERGE_REQUEST_ID&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="nt">if&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">$CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">deploy_baseline&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">test setup&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">deploy_candidate&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">test setup&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">perf_test_baseline&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">perf test&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">perf_test_candidate&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">perf test&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">cleanup_baseline&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">cleanup&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">cleanup_candidate&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">cleanup&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">analyze_result&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">analyze&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">script&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># Analyze the result&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;br>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>&lt;a href="https://grafana.com/blog/2021/01/27/k6-vs-jmeter-comparison/" target="_blank" rel="noopener">https://grafana.com/blog/2021/01/27/k6-vs-jmeter-comparison/&lt;/a>&lt;/li>
+&lt;/ul></description></item></channel></rss>
