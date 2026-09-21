@@ -1,0 +1,1542 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Data Engineering | Wit's Blog</title><link>https://witsblog.github.io/tag/data-engineering/</link><atom:link href="https://witsblog.github.io/tag/data-engineering/index.xml" rel="self" type="application/rss+xml"/><description>Data Engineering</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-us</language><lastBuildDate>Mon, 21 Sep 2026 00:00:00 +0700</lastBuildDate><image><url>https://witsblog.github.io/media/icon_hu66cf44b0d2eab4dae9de00f68d847da7_1567_512x512_fill_lanczos_center_3.png</url><title>Data Engineering</title><link>https://witsblog.github.io/tag/data-engineering/</link></image><item><title>Migrating a Legacy Experimentation Engine and its Live DB with Zero Downtime</title><link>https://witsblog.github.io/post/086_experimentation_migration/</link><pubDate>Mon, 21 Sep 2026 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/086_experimentation_migration/</guid><description>&lt;br>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>&lt;a href="https://witsblog.github.io/post/038_pricing_experiment/">Pricing experimentation&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>Debugging the 7-Day Spark Job</title><link>https://witsblog.github.io/post/083_spark_gc_starvation/</link><pubDate>Wed, 16 Sep 2026 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/083_spark_gc_starvation/</guid><description>&lt;br>
+&lt;h2 id="the-incident-from-3-hours-to-7-days">The Incident: From 3 Hours to 7 Days&lt;/h2>
+&lt;p>Our central Spark ingestion pipeline feeds user-defined feature tables into our Feature Store, powering over 100+ production ML models. It is built to scale to
+support data science and business users across teams as our feature platform grows.&lt;/p>
+&lt;p>The job used to take about 3–4 hours. Then it went up to 4 days. Recently, it ran for over 7 days and never finished.&lt;/p>
+&lt;p>
+&lt;figure id="figure-job-duration-over-60-days--not-a-slow-regression-but-a-sharp-performance-drop">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/01.png" alt="Job duration over 60 days — Not a slow regression, but a sharp performance drop" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Job duration over 60 days — Not a slow regression, but a sharp performance drop
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;p>Initial triage checklist:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>Did we deploy a code change?&lt;/strong> No. Same commit, same configs.&lt;/li>
+&lt;li>&lt;strong>Did data volume surge?&lt;/strong> No. Row count and data size didn&amp;rsquo;t significantly increase. (I
+previously wrote a &lt;a href="https://witsblog.github.io/post/073_data_monitoring/">library&lt;/a> which monitors just exactly this.)&lt;/li>
+&lt;li>&lt;strong>Is the cluster unhealthy?&lt;/strong> No. Other teams&amp;rsquo; Spark jobs finished normally.&lt;/li>
+&lt;li>&lt;strong>Is the Feature Store throttling?&lt;/strong> No. Write latency and error rate were flat.&lt;/li>
+&lt;li>&lt;strong>Did the job fail with an error?&lt;/strong> No stack traces, no OOM errors, no non-zero exit codes. It just ran forever.&lt;/li>
+&lt;/ul>
+&lt;p>The Spark UI show active execution:&lt;/p>
+&lt;p>
+&lt;figure id="figure-active-jobs">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/02.png" alt="Active Jobs" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Active Jobs
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;p>Out of 40 tasks, 39 finished in seconds. 1 task however failed 177 times and kept retrying. Every task failure logged:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-fallback" data-lang="fallback">&lt;span class="line">&lt;span class="cl">ExecutorLostFailure (executor ... exited unrelated to the running tasks)
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">Reason: Executor killed by driver.
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>
+&lt;figure id="figure-executors-errors">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/03.png" alt="Executor&amp;#39;s errors" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Executor&amp;rsquo;s errors
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;p>The driver logs showed a heartbeat timeout every ~20 minutes:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-fallback" data-lang="fallback">&lt;span class="line">&lt;span class="cl">Removing executor ... with no recent heartbeats: 149645 ms exceeds timeout 120000 ms
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>So the driver kept killing executors in an infinite loop.&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/04.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/05.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>The job already had 16 GB per executor. The tempting fix, throwing hardware and memory at it (&lt;em>this will surely help 🤞&lt;/em>):&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-bash" data-lang="bash">&lt;span class="line">&lt;span class="cl">--executor-memory 32g --num-executors &lt;span class="m">100&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>No. This doesn&amp;rsquo;t help—it blows up the cloud bill 💵. As we will see, more executors do nothing when only one task has data. More memory only buys time before an unbounded heap fills up again.&lt;/p>
+&lt;br>
+&lt;h2 id="business-impact">Business Impact&lt;/h2>
+&lt;p>The job runs every few hours to update online features. When it stalls, 100+ production models score on stale data, directly hitting pricing predictions.&lt;/p>
+&lt;p>The goal was to get runtime back under an hour by fixing the real root cause once and for all.&lt;/p>
+&lt;br>
+&lt;h2 id="investigation">Investigation&lt;/h2>
+&lt;h3 id="1-the-parquet-midpoint-trap">1) The Parquet Midpoint Trap&lt;/h3>
+&lt;p>The input was a single ~246 MiB Parquet file. Calling &lt;code>df.rdd.getNumPartitions&lt;/code> returned 40, so Spark launched 40 tasks. But per-task metrics made no sense:&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/06.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>One task read all &lt;strong>45,876,936&lt;/strong> rows. The other 39 tasks read 0 bytes and finished immediately.&lt;/p>
+&lt;p>Why?&lt;/p>
+&lt;p>Parquet files store data in &lt;strong>row groups&lt;/strong>, which form the unit of work for
+Parquet readers.&lt;/p>
+&lt;p>Spark doesn&amp;rsquo;t seem know the total number of row groups when it plans. Getting
+it would mean opening every file and seeking to the end of each one for its
+footer. For multiple files on object storage like AWS S3, that can take time.
+I assume that&amp;rsquo;s the trade Spark made.&lt;/p>
+&lt;p>Instead, when Spark plans file splits, it calculates byte ranges based on file metadata via &lt;a href="https://github.com/apache/spark/blob/v3.3.4/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/FilePartition.scala#L86-L97" target="_blank" rel="noopener">&lt;code>FilePartition.maxSplitBytes&lt;/code>&lt;/a>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">def&lt;/span> &lt;span class="n">maxSplitBytes&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">sparkSession&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">SparkSession&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">selectedPartitions&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Seq&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">PartitionDirectory&lt;/span>&lt;span class="o">])&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Long&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">defaultMaxSplitBytes&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">sparkSession&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">sessionState&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">conf&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">filesMaxPartitionBytes&lt;/span> &lt;span class="c1">// 128 MiB
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">val&lt;/span> &lt;span class="n">openCostInBytes&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">sparkSession&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">sessionState&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">conf&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">filesOpenCostInBytes&lt;/span> &lt;span class="c1">// 4 MiB
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">val&lt;/span> &lt;span class="n">minPartitionNum&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">sparkSession&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">sessionState&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">conf&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">filesMinPartitionNum&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">.&lt;/span>&lt;span class="n">getOrElse&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">sparkSession&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">leafNodeDefaultParallelism&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="c1">// 40
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">val&lt;/span> &lt;span class="n">totalBytes&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">selectedPartitions&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">flatMap&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">_&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">files&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">map&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">_&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">getLen&lt;/span> &lt;span class="o">+&lt;/span> &lt;span class="n">openCostInBytes&lt;/span>&lt;span class="o">)).&lt;/span>&lt;span class="n">sum&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">bytesPerCore&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">totalBytes&lt;/span> &lt;span class="o">/&lt;/span> &lt;span class="n">minPartitionNum&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="nc">Math&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">min&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">defaultMaxSplitBytes&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="nc">Math&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">max&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">openCostInBytes&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">bytesPerCore&lt;/span>&lt;span class="o">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>Each byte range is assigned to 1 task.&lt;/p>
+&lt;p>The actual read parallelism reckoning comes at read time, when Spark passes a task&amp;rsquo;s byte range to the Parquet reader in &lt;a href="https://github.com/apache/spark/blob/v3.3.4/sql/core/src/main/java/org/apache/spark/sql/execution/datasources/parquet/SpecificParquetRecordReaderBase.java#L94-L101" target="_blank" rel="noopener">&lt;code>SpecificParquetRecordReaderBase.initialize&lt;/code>&lt;/a>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-java" data-lang="java">&lt;span class="line">&lt;span class="cl">&lt;span class="n">ParquetReadOptions&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">options&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">HadoopReadOptions&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">builder&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">configuration&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">file&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">withRange&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">split&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getStart&lt;/span>&lt;span class="p">(),&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">split&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getStart&lt;/span>&lt;span class="p">()&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">+&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">split&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getLength&lt;/span>&lt;span class="p">())&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c1">// &amp;lt;-- the whole story&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">build&lt;/span>&lt;span class="p">();&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>At read time, &lt;code>parquet-java&lt;/code> determines which task owns a row group using a midpoint test in &lt;a href="https://github.com/apache/parquet-java/blob/apache-parquet-1.12.2/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L1284-L1287" target="_blank" rel="noopener">&lt;code>ParquetMetadataConverter.filterFileMetaDataByMidpoint&lt;/code>&lt;/a>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-java" data-lang="java">&lt;span class="line">&lt;span class="cl">&lt;span class="kt">long&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">midPoint&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">startIndex&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">+&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">totalSize&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">/&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">2&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="k">if&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">filter&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">contains&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">midPoint&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">newRowGroups&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">add&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">rowGroup&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>A task only reads a row group if its byte range covers the row group&amp;rsquo;s midpoint:&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/midpoint.svg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>In our case, the parquet file held exactly 1 row group:&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/midpoint_single.svg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>This explains why 1 task did all the work, even though 40 tasks were allocated.&lt;/p>
+&lt;h3 id="2-the-unbounded-future-buffer">2) The Unbounded Future Buffer&lt;/h3>
+&lt;p>The skew explains the imbalance, but it doesn&amp;rsquo;t explain why an executor with a 16 GB can&amp;rsquo;t grind through 45.8 million rows however slowly.&lt;/p>
+&lt;p>So I took a few thread dumps from an executor before dying, and all pointed to:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-text" data-lang="text">&lt;span class="line">&lt;span class="cl">&amp;#34;Executor task launch worker for task 5.260 in stage 809.0&amp;#34; RUNNABLE
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> scala.concurrent.impl.Promise$DefaultPromise.onComplete(Promise.scala:307)
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> scala.concurrent.Future.zipWith(Future.scala:457)
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> scala.concurrent.Future$.$anonfun$sequence$1(Future.scala:671)
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> scala.collection.LinearSeqOptimized.foldLeft(LinearSeqOptimized.scala:126)
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> scala.concurrent.Future$.sequence(Future.scala:671)
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> featurestore.util.ConcurrentFutureProcessor$.concurrentMap(ConcurrentFutureProcessor.scala:32)
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>I tracked it down to &lt;code>concurrentMap&lt;/code> in our shared Feature Store library:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">def&lt;/span> &lt;span class="n">concurrentMap&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">A&lt;/span>, &lt;span class="kt">T&lt;/span>&lt;span class="o">](&lt;/span>&lt;span class="n">items&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">TraversableOnce&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">A&lt;/span>&lt;span class="o">],&lt;/span> &lt;span class="n">maxInFlight&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Int&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">timeout&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Duration&lt;/span>&lt;span class="o">)(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">task&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">A&lt;/span> &lt;span class="o">=&amp;gt;&lt;/span> &lt;span class="nc">Future&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">T&lt;/span>&lt;span class="o">]&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">)(&lt;/span>&lt;span class="k">implicit&lt;/span> &lt;span class="n">ec&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">ExecutionContext&lt;/span>&lt;span class="o">)&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">List&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">T&lt;/span>&lt;span class="o">]&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">futures&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="nc">ListBuffer&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">Future&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">T&lt;/span>&lt;span class="o">]]()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">pendingFutures&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="nc">ListBuffer&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">Future&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">T&lt;/span>&lt;span class="o">]]()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">items&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">foreach&lt;/span> &lt;span class="o">{&lt;/span> &lt;span class="n">item&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">future&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">task&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">item&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">futures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">append&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">future&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="c1">// &amp;lt;-- Appended forever, never drained
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">pendingFutures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">append&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">future&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Limit concurrency to maxInFlight
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">if&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">pendingFutures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">size&lt;/span> &lt;span class="o">&amp;gt;=&lt;/span> &lt;span class="n">maxInFlight&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">pendingFutures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">headOption&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">foreach&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="nc">Await&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">ready&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">_&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">timeout&lt;/span>&lt;span class="o">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">while&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">pendingFutures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">headOption&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">exists&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">_&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">isCompleted&lt;/span>&lt;span class="o">))&lt;/span> &lt;span class="n">pendingFutures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">remove&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">futures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">nonEmpty&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="nc">Await&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">result&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="nc">Future&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">sequence&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">futures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">toList&lt;/span>&lt;span class="o">),&lt;/span> &lt;span class="n">timeout&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="c1">// &amp;lt;-- Allocations
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="o">}&lt;/span> &lt;span class="k">else&lt;/span> &lt;span class="nc">Nil&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>The bug was subtle:&lt;/p>
+&lt;ol>
+&lt;li>&lt;code>pendingFutures&lt;/code> bounded concurrency to &lt;code>maxInFlight&lt;/code> and drained completed futures properly.&lt;/li>
+&lt;li>But &lt;code>futures&lt;/code> was never drained. Every future across all 45.8 million rows was appended into a single list and held in memory.&lt;/li>
+&lt;li>&lt;code>Future.sequence&lt;/code> made it worse: it runs a &lt;code>foldLeft&lt;/code> calling &lt;code>zipWith&lt;/code>, allocating millions more &lt;code>Promise&lt;/code> objects.&lt;/li>
+&lt;/ol>
+&lt;p>The implementation bounds concurrency, but not memory&lt;/p>
+&lt;h3 id="3-stop-the-world-gc-freezes-the-heartbeat">3) Stop-The-World GC Freezes the Heartbeat&lt;/h3>
+&lt;p>The job had no JVM telemetry, so I attached an OpenTelemetry agent to the executors to export JVM metrics to Grafana:&lt;/p>
+&lt;p>
+&lt;figure id="figure-g1-old-generation-climbing-linearly-then-gc-duration-spiking-as-it-saturates">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/07.png" alt="G1 old generation climbing linearly, then GC duration spiking as it saturates" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+G1 old generation climbing linearly, then GC duration spiking as it saturates
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;ul>
+&lt;li>Old generation heap usage (&lt;code>jvm.memory.used&lt;/code>) constantly climbed at ~700 MiB/min.&lt;/li>
+&lt;li>Old generation usage after collection (&lt;code>jvm.memory.used_after_last_gc&lt;/code>) didn&amp;rsquo;t drop after GC runs. This means the GC cannot reclaim memory because they were still considered live references by the JVM.&lt;/li>
+&lt;li>Minor GC pauses escalated to 51.4 seconds per minute, meaning application threads were frozen by stop-the-world pauses for over 86% of the time.&lt;/li>
+&lt;/ul>
+&lt;p>Spark executors send heartbeats every 10 seconds via a background thread in &lt;a href="https://github.com/apache/spark/blob/v3.3.4/core/src/main/scala/org/apache/spark/Heartbeater.scala#L38-L48" target="_blank" rel="noopener">&lt;code>Heartbeater&lt;/code>&lt;/a>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">private&lt;/span> &lt;span class="k">val&lt;/span> &lt;span class="n">heartbeater&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="nc">ThreadUtils&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">newDaemonSingleThreadScheduledExecutor&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">name&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">heartbeater&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">scheduleAtFixedRate&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">heartbeatTask&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">initialDelay&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">intervalMs&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="nc">TimeUnit&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="nc">MILLISECONDS&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;mark>A long stop-the-world GC pause freezes all JVM threads, including this heartbeater.&lt;/mark>&lt;/p>
+&lt;p>On the driver side, &lt;a href="https://github.com/apache/spark/blob/v3.3.4/core/src/main/scala/org/apache/spark/HeartbeatReceiver.scala#L202-L215" target="_blank" rel="noopener">&lt;code>HeartbeatReceiver&lt;/code>&lt;/a> waits up to 120 seconds. When an executor goes silent, the driver assumes it crashed and evicts it:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">if&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">now&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="n">lastSeenMs&lt;/span> &lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">executorTimeoutMs&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">logWarning&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="s">s&amp;#34;Removing executor &lt;/span>&lt;span class="si">$executorId&lt;/span>&lt;span class="s"> with no recent heartbeats: &amp;#34;&lt;/span> &lt;span class="o">+&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s">s&amp;#34;&lt;/span>&lt;span class="si">${&lt;/span>&lt;span class="n">now&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="n">lastSeenMs&lt;/span>&lt;span class="si">}&lt;/span>&lt;span class="s"> ms exceeds timeout &lt;/span>&lt;span class="si">$executorTimeoutMs&lt;/span>&lt;span class="s"> ms&amp;#34;&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Asynchronously kill the executor to avoid blocking the current thread
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">killExecutorThread&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">submit&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">new&lt;/span> &lt;span class="nc">Runnable&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">override&lt;/span> &lt;span class="k">def&lt;/span> &lt;span class="n">run&lt;/span>&lt;span class="o">()&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Unit&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nc">Utils&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">tryLogNonFatalError&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">sc&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">killAndReplaceExecutor&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">executorId&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>Which is exactly the log we saw:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-fallback" data-lang="fallback">&lt;span class="line">&lt;span class="cl">Removing executor 158 with no recent heartbeats: 149645 ms exceeds timeout 120000 ms
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>The driver killed the executor, requested a fresh replacement, handed it the exact same task, and watched it freeze and die again—177 times in a row.&lt;/p>
+&lt;br>
+&lt;h2 id="the-fix">The Fix&lt;/h2>
+&lt;h3 id="1-repartition-by-row-count-not-file-bytes">1) Repartition by Row Count, Not File Bytes&lt;/h3>
+&lt;p>When tasks execute per-record asynchronous calls, work volume is driven by row count, not byte size.&lt;/p>
+&lt;p>Instead of relying on Spark&amp;rsquo;s default byte splitting, we explicitly repartition based on target rows:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">val&lt;/span> &lt;span class="n">targetRowsPerPartition&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="n">_000_000&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">val&lt;/span> &lt;span class="n">partitions&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">math&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">max&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">rowCount&lt;/span> &lt;span class="o">/&lt;/span> &lt;span class="n">targetRowsPerPartition&lt;/span>&lt;span class="o">).&lt;/span>&lt;span class="n">toInt&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">df&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">repartition&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">partitions&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>This breaks any giant row groups into balanced partitions across all executors.&lt;/p>
+&lt;h3 id="2-stream-with-a-semaphore-backpressure">2) Stream with a Semaphore Backpressure&lt;/h3>
+&lt;p>Looking at the call site, the caller only cared about recording failed rows:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">val&lt;/span> &lt;span class="n">errorRows&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">df&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">mapPartitions&lt;/span> &lt;span class="o">{&lt;/span> &lt;span class="n">rows&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">rows1&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">rows2&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">rows&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">duplicate&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">implicit&lt;/span> &lt;span class="k">val&lt;/span> &lt;span class="n">ec&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">ExecutionContextExecutor&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">scala&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">concurrent&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="nc">ExecutionContext&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">global&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">rowIngestion&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="nc">RowIngestionSingletonStore&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="nc">_rowIngestionRegistryId&lt;/span>&lt;span class="o">)(...)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">try&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="nc">ConcurrentFutureProcessor&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">.&lt;/span>&lt;span class="n">concurrentMap&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">rows1&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">maxInFlight&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">timeout&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="o">{&lt;/span> &lt;span class="n">row&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">rowIngestion&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">ingestAsync&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">row&lt;/span>&lt;span class="o">).&lt;/span>&lt;span class="n">map&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">result&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">row&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">result&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="nc">SendResult&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="nc">OK&lt;/span>&lt;span class="o">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">.&lt;/span>&lt;span class="n">iterator&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">.&lt;/span>&lt;span class="n">filterNot&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">_&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">_2&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="c1">// &amp;lt;-- Discard successful rows anyway
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="o">.&lt;/span>&lt;span class="n">map&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">_&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">_1&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span> &lt;span class="k">catch&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">case&lt;/span> &lt;span class="k">_:&lt;/span> &lt;span class="kt">TimeoutException&lt;/span> &lt;span class="o">=&amp;gt;&lt;/span> &lt;span class="n">rows2&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">}(&lt;/span>&lt;span class="n">df&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">encoder&lt;/span>&lt;span class="o">).&lt;/span>&lt;span class="n">rdd&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>There was no reason to buffer 45.8 million futures. I replaced it with a bounded streaming worker using a &lt;code>Semaphore&lt;/code>, sth like:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">def&lt;/span> &lt;span class="n">ingestPartitions&lt;/span>&lt;span class="o">(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">rows&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Iterator&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">Row&lt;/span>&lt;span class="o">],&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">rowIngestion&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">RowIngestion&lt;/span>&lt;span class="o">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">maxInFlight&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Int&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">)(&lt;/span>&lt;span class="k">implicit&lt;/span> &lt;span class="n">ec&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">ExecutionContext&lt;/span>&lt;span class="o">)&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Iterator&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">Row&lt;/span>&lt;span class="o">]&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">failed&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="nc">ConcurrentLinkedQueue&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">Row&lt;/span>&lt;span class="o">]()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">inFlight&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="nc">Semaphore&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">maxInFlight&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">pending&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="nc">AtomicLong&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="mi">1L&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">done&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="nc">CountDownLatch&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">def&lt;/span> &lt;span class="n">onOneDone&lt;/span>&lt;span class="o">()&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Unit&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">inFlight&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">release&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">pending&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">decrementAndGet&lt;/span>&lt;span class="o">()&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="mi">0L&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="n">done&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">countDown&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">rows&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">foreach&lt;/span> &lt;span class="o">{&lt;/span> &lt;span class="n">row&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">inFlight&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">acquire&lt;/span>&lt;span class="o">()&lt;/span> &lt;span class="c1">// Blocks reading from iterator when inFlight hits limit
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">pending&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">incrementAndGet&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">try&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">rowIngestion&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">ingestAsync&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">row&lt;/span>&lt;span class="o">).&lt;/span>&lt;span class="n">onComplete&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">case&lt;/span> &lt;span class="nc">Success&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">result&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="k">if&lt;/span> &lt;span class="n">result&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="nc">SendResult&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="nc">OK&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span> &lt;span class="n">onOneDone&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">case&lt;/span> &lt;span class="k">_&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span> &lt;span class="n">failed&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">add&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">row&lt;/span>&lt;span class="o">);&lt;/span> &lt;span class="n">onOneDone&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span> &lt;span class="k">catch&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">case&lt;/span> &lt;span class="nc">NonFatal&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">_&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span> &lt;span class="n">failed&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">add&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">row&lt;/span>&lt;span class="o">);&lt;/span> &lt;span class="n">onOneDone&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">onOneDone&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">done&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">await&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">failed&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">iterator&lt;/span>&lt;span class="o">().&lt;/span>&lt;span class="n">asScala&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">val&lt;/span> &lt;span class="n">errorRows&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">df&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">mapPartitions&lt;/span> &lt;span class="o">{&lt;/span> &lt;span class="n">rows&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">ingestPartitions&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">rows&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">rowIngestion&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">maxInFlight&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">}(&lt;/span>&lt;span class="n">df&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">encoder&lt;/span>&lt;span class="o">).&lt;/span>&lt;span class="n">rdd&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>This ensures:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>Constant memory footprint:&lt;/strong> Memory stays fixed at $O(\text{maxInFlight})$ instead of scaling with row count.&lt;/li>
+&lt;li>&lt;strong>Young Gen collection:&lt;/strong> Successful futures complete and are dereferenced immediately, getting garbage-collected in milliseconds without touching Old Gen.&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="results">Results&lt;/h2>
+&lt;p>Runtime dropped from hanging indefinitely back to &lt;strong>~1 hour&lt;/strong>, while cutting executor memory from 16 GB to 8 GB.&lt;/p>
+&lt;p>
+&lt;figure id="figure-job-runtime-restored-to-1-hour">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/08.png" alt="Job runtime restored to ~1 hour" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Job runtime restored to ~1 hour
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h2 id="learnings">Learnings&lt;/h2>
+&lt;ul>
+&lt;li>&lt;strong>Read parallelism is bounded by row groups:&lt;/strong> Spark calculates split tasks by byte ranges, but Parquet readers assign work by row group midpoint.&lt;/li>
+&lt;li>&lt;strong>The Generational Hypothesis:&lt;/strong> Most objects die young. Structure code so allocations are consumed and dereferenced immediately, never surviving into Old Generation.&lt;/li>
+&lt;/ul></description></item><item><title>Data Pipeline Observability</title><link>https://witsblog.github.io/post/073_data_monitoring/</link><pubDate>Fri, 26 Jun 2026 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/073_data_monitoring/</guid><description>&lt;br>
+&lt;h2 id="the-question">The Question&lt;/h2>
+&lt;p>Thousands of data pipelines. Sooner or later, someone has to answer:&lt;/p>
+&lt;blockquote>
+&lt;p>For every job, how much data did this run touch, how long did it take, how much did it cost — and how does that compare to yesterday, last week, last month?&lt;/p>
+&lt;/blockquote>
+&lt;p>Sounds boring. But it&amp;rsquo;s also the highest-leverage question a platform team can answer: almost every silent pipeline failure shows up first as a change in one of those numbers.&lt;/p>
+&lt;br>
+&lt;h2 id="mapping-sre-golden-signals-to-data-pipelines">Mapping SRE Golden Signals to Data Pipelines&lt;/h2>
+&lt;p>Google&amp;rsquo;s &lt;a href="https://sre.google/sre-book/monitoring-distributed-systems/" target="_blank" rel="noopener">SRE framework&lt;/a> defines &lt;strong>Errors&lt;/strong>, &lt;strong>Traffic&lt;/strong>, &lt;strong>Latency&lt;/strong>, and &lt;strong>Saturation&lt;/strong> as the foundational metrics for system health.&lt;/p>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>Signal&lt;/th>
+&lt;th>Data Pipeline Equivalent&lt;/th>
+&lt;th>What It Catches&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>Errors&lt;/td>
+&lt;td>Task failures &amp;amp; retries&lt;/td>
+&lt;td>Crashes, OOMs&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>Traffic&lt;/td>
+&lt;td>Rows &amp;amp; bytes (read / written)&lt;/td>
+&lt;td>Volume anomalies, silent drops, and partial writes&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>Latency&lt;/td>
+&lt;td>Stage &amp;amp; job runtime&lt;/td>
+&lt;td>SLA breaches, data surges, and join skew&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>Saturation&lt;/td>
+&lt;td>CPU, Memory spill, JVM GC&lt;/td>
+&lt;td>Executor starvation and memory pressure&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;h3 id="1-errors">1) Errors&lt;/h3>
+&lt;blockquote>
+&lt;p>&lt;em>&amp;ldquo;the rate of requests that fail.&amp;rdquo;&lt;/em>&lt;/p>
+&lt;/blockquote>
+&lt;p>In data pipelines, the common trap is relying solely on orchestrator exit codes. A Spark job can exit &lt;code>0&lt;/code> while hundreds of tasks fail and retry under the hood.&lt;/p>
+&lt;p>Example metrics:&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>failedTasksCount&lt;/code> &amp;amp; &lt;code>taskFailureRate&lt;/code>: Categorized by reason (&lt;code>ExceptionFailure&lt;/code>, &lt;code>FetchFailed&lt;/code>, &lt;code>ExecutorLostFailure&lt;/code>).&lt;/li>
+&lt;/ul>
+&lt;h3 id="2-traffic">2) Traffic&lt;/h3>
+&lt;blockquote>
+&lt;p>&lt;em>&amp;ldquo;a measure of how much demand is being placed on your system.&amp;rdquo;&lt;/em>&lt;/p>
+&lt;/blockquote>
+&lt;p>For pipelines, demand is data throughput—rows and bytes in and out, tagged by source, direction, and user.&lt;/p>
+&lt;p>Example metrics:&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>inputBytesRead&lt;/code> &amp;amp; &lt;code>inputRecordsRead&lt;/code>: Volume per input scan (S3, Kafka, Delta, Iceberg).&lt;/li>
+&lt;li>&lt;code>outputBytesWritten&lt;/code> &amp;amp; &lt;code>outputRecordsWritten&lt;/code>: Volume delivered to destination sinks.&lt;/li>
+&lt;li>&lt;code>volumeAnomalyRatio&lt;/code>: Run-over-run record count vs. a rolling 7-day baseline.&lt;/li>
+&lt;/ul>
+&lt;h3 id="3-latency">3) Latency&lt;/h3>
+&lt;blockquote>
+&lt;p>&lt;em>&amp;ldquo;the time it takes to service a request,&amp;rdquo;&lt;/em> tracked in percentiles rather than simple averages.&lt;/p>
+&lt;/blockquote>
+&lt;p>For pipelines, it&amp;rsquo;s total runtime against business SLAs. But high-level duration only becomes actionable when decomposed.&lt;/p>
+&lt;p>Example metrics:&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>jobDurationMs&lt;/code> &amp;amp; &lt;code>stageDurationMs&lt;/code>: Wall-clock runtimes per job and stage.&lt;/li>
+&lt;li>&lt;code>taskSkewRatio&lt;/code> (&lt;code>maxTaskDuration / p50TaskDuration&lt;/code>): Direct indicator of data skew.&lt;/li>
+&lt;/ul>
+&lt;h3 id="4-saturation">4) Saturation&lt;/h3>
+&lt;blockquote>
+&lt;p>&lt;em>&amp;ldquo;how full your service is, emphasizing the resources that are most constrained.&amp;rdquo;&lt;/em>&lt;/p>
+&lt;/blockquote>
+&lt;p>For Spark, this measures executor CPU, JVM memory, disk I/O, and network limits.&lt;/p>
+&lt;p>Pipelines rarely fail cold; they saturate first. An executor running out of memory doesn&amp;rsquo;t crash immediately—it thrashes in GC, spills shuffle partitions to disk before finally throwing an OOM.&lt;/p>
+&lt;p>Example metrics:&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>jvmGCTime&lt;/code> &amp;amp; &lt;code>jvmGCRatio&lt;/code> (&lt;code>jvmGCTime / executorRunTime&lt;/code>): Time spent in garbage collection. &amp;gt;10% signals severe memory pressure.&lt;/li>
+&lt;li>&lt;code>memorySpillBytes&lt;/code> &amp;amp; &lt;code>diskSpillBytes&lt;/code>: Shuffle data that couldn&amp;rsquo;t fit in execution memory and spilled to local disk.&lt;/li>
+&lt;li>&lt;code>executorCpuTime&lt;/code> vs &lt;code>executorRunTime&lt;/code>: Low ratio indicates tasks blocked on I/O wait (S3 throttling, network shuffle, slow databases).&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="how-to-monitor-across-teams">How to Monitor Across Teams&lt;/h2>
+&lt;p>Take traffic as an example. The two obvious approaches both fail.&lt;/p>
+&lt;h3 id="anti-pattern-1-cron-queries">Anti-Pattern 1: Cron Queries&lt;/h3>
+&lt;p>The naive answer: running scheduled job &lt;code>SELECT COUNT(*), SUM(&amp;lt;byte_size&amp;gt;) FROM &amp;lt;table&amp;gt;&lt;/code> against every table we care about.&lt;/p>
+&lt;ul>
+&lt;li>&lt;mark>Doesn&amp;rsquo;t scale to thousands of tables.&lt;/mark> Every new table is one more entry to maintain.&lt;/li>
+&lt;li>&lt;mark>Costs.&lt;/mark> Scans entire datasets periodically. That bill isn&amp;rsquo;t free.&lt;/li>
+&lt;li>&lt;mark>Not real-time.&lt;/mark> By the time the cron queries run, the upstream job finished hours ago.&lt;/li>
+&lt;li>&lt;mark>Lack of Attribution.&lt;/mark> A row count reported doesn&amp;rsquo;t tell &lt;em>which job&lt;/em> produced those rows or &lt;em>what it read&lt;/em> to produce them.&lt;/li>
+&lt;/ul>
+&lt;h3 id="anti-pattern-2-user-land-application-hooks">Anti-Pattern 2: User-Land Application Hooks&lt;/h3>
+&lt;p>The other obvious answer: push instrumentation down to the user, requiring application developers to explicitly instrument code (e.g., calling df.count() prior to writes)&lt;/p>
+&lt;ul>
+&lt;li>&lt;mark>Optional instrumentation is forgotten instrumentation.&lt;/mark> In a platform with hundreds of contributors, &amp;ldquo;every team should remember to do X&amp;rdquo; is a hope, not a strategy.&lt;/li>
+&lt;li>&lt;mark>&lt;code>df.count()&lt;/code> isn&amp;rsquo;t free.&lt;/mark> It forces an additional materialization pass over the lineage graph unless cached. Now we&amp;rsquo;re asking every user to think about caching too, which they&amp;rsquo;ll get wrong.&lt;/li>
+&lt;li>&lt;mark>Governance Friction.&lt;/mark> Two teams tag their metrics differently and we can&amp;rsquo;t compare them.&lt;/li>
+&lt;/ul>
+&lt;p>Both fail for the same reason: they push observability work onto the platform&amp;rsquo;s users, instead of making it a property of the platform.&lt;/p>
+&lt;br>
+&lt;h2 id="what-i-built-the-telemetry-library">What I Built: The Telemetry Library&lt;/h2>
+&lt;p>The library takes a different approach: it hooks directly into Spark&amp;rsquo;s runtime internals to collect telemetry as jobs execute—throughput, stage runtimes, GC pauses, memory spill, and task execution profiles.&lt;/p>
+&lt;p>Integration is a single registration at application startup:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">implicit&lt;/span> &lt;span class="k">val&lt;/span> &lt;span class="n">spark&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">SparkSession&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nc">SparkSession&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">builder&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">.&lt;/span>&lt;span class="n">appName&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="s">&amp;#34;my-job&amp;#34;&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">.&lt;/span>&lt;span class="n">getOrCreate&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">val&lt;/span> &lt;span class="n">observability&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="nc">PlatformObservability&lt;/span>&lt;span class="o">(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">metricPrefix&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="s">&amp;#34;platform.spark.observability&amp;#34;&lt;/span>&lt;span class="o">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">)(&lt;/span>&lt;span class="n">spark&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">observability&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">register&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>What does an application team actually get?&lt;/p>
+&lt;ul>
+&lt;li>&lt;mark>One line of code.&lt;/mark> Register once at session initialization; zero pipeline refactoring.&lt;/li>
+&lt;li>&lt;mark>Zero compute overhead.&lt;/mark> Extracted from Spark runtime internals—no trigger queries, no re-computations, no extra cloud spend.&lt;/li>
+&lt;li>&lt;mark>Standardized org-wide.&lt;/mark> Consistent metrics and tags across hundreds of pipelines.&lt;/li>
+&lt;/ul>
+&lt;p>Metrics are pushed asynchronously to a metrics gateway and visualized in Grafana, backing automated anomaly detection and team dashboards.&lt;/p>
+&lt;p>
+&lt;figure id="figure-latency-plotted-alongside-traffic-a-real-slowdown-that-turned-out-to-be-data-driven-not-a-cluster-issue">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/073/01.png" alt="Latency plotted alongside traffic. A real slowdown that turned out to be data-driven, not a cluster issue" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Latency plotted alongside traffic. A real slowdown that turned out to be data-driven, not a cluster issue
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h3 id="beyond-monitoring-optimization-hints">Beyond Monitoring: Optimization Hints&lt;/h3>
+&lt;p>The library also flags redundant work: if the same DataFrame is recomputed without an intervening &lt;code>.cache()&lt;/code> or &lt;code>.persist()&lt;/code>, it emits a warning. Catching duplicate compute directly on the dashboard gives engineers immediate actionable items.&lt;/p>
+&lt;br>
+&lt;h2 id="the-result-a-real-incident">The Result: A Real Incident&lt;/h2>
+&lt;p>A daily pipeline once finished completely green—exit code zero, all stages succeeded, alerts silent—but had written only ~40% of its usual rows due to an upstream feed degradation. The data team didn&amp;rsquo;t catch it; a business user did, hours later, when revenue dashboards dropped.&lt;/p>
+&lt;p>The library catches that class of silent failure immediately: the moment output volume drops below its rolling baseline, an alert fires before downstream consumers read incomplete data.&lt;/p>
+&lt;br>
+&lt;h2 id="notes-platform-vs-domain-metrics">Notes: Platform vs. Domain Metrics&lt;/h2>
+&lt;p>The Four Golden Signals answer: &lt;mark>Did the pipeline run healthily and efficiently?&lt;/mark>&lt;br>
+They cannot answer: &lt;mark>Is the data mathematically and logically correct?&lt;/mark>&lt;/p>
+&lt;p>Domain integrity—such as financial reconciliation, or value ranges—still belongs in application-level assertions.&lt;/p>
+&lt;br>
+&lt;h2 id="whats-next">What&amp;rsquo;s Next&lt;/h2>
+&lt;ul>
+&lt;li>&lt;strong>Freshness &amp;amp; SLA:&lt;/strong> Data is landing on time and isn&amp;rsquo;t stale.&lt;/li>
+&lt;li>&lt;strong>Data Quality:&lt;/strong> Null values, value ranges, referential integrity, etc.&lt;/li>
+&lt;li>&lt;strong>Lineage:&lt;/strong> Shipping captured source/sink metadata to a catalog layer (OpenLineage, Unity Catalog) to map cross-pipeline dependencies.&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>&lt;a href="https://sre.google/sre-book/monitoring-distributed-systems/" target="_blank" rel="noopener">Monitoring Distributed Systems — Google SRE Book, Chapter 6 (Four Golden Signals)&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>Migrating HDFS to S3 Object Storage with Zero Downtime</title><link>https://witsblog.github.io/post/047_object_storage_migration/</link><pubDate>Wed, 21 Aug 2024 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/047_object_storage_migration/</guid><description>&lt;br>
+&lt;h2 id="the-legacy-hdfs">The Legacy HDFS&lt;/h2>
+&lt;p>A high-throughput backend service (1000+ pods serving live traffic) loaded data from on-prem HDFS. The service reads data into memory at startup and refreshes periodically in the background, while upstream Spark jobs and upload services produce and write the data.&lt;/p>
+&lt;br>
+&lt;h2 id="requirements">Requirements&lt;/h2>
+&lt;p>The task was to migrate the storage layer from HDFS to &lt;em>S3-compatible object storage&lt;/em>. Constraints:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>Zero downtime&lt;/strong>
+&lt;ul>
+&lt;li>Continuous availability with zero maintenance windows.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>Decoupled lifecycles&lt;/strong>
+&lt;ul>
+&lt;li>Independent objects produced by separate upstream pipelines. A single synchronized cutover was not possible.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>Zero blast radius&lt;/strong>
+&lt;ul>
+&lt;li>Live pricing decisions depend on these data. We have to minimize impact as much as possible.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="migration-architecture">Migration Architecture&lt;/h2>
+&lt;p>Because HDFS reads are off the request path, we used the Strangler pattern with shadow dual-reads without risking service latency. The idea is to implement S3 read behind the existing read interface and used dynamic feature flags to route traffic and perform asynchronous parity diffing per data path.&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/047/01_migration_architecture.svg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>Dynamic per-path feature flag simplified pseudocode:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-java" data-lang="java">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">enum&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">ReadMode&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">HDFS_ONLY&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c1">// Read only from HDFS (instant rollback)&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">SHADOW_HDFS&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c1">// Read both, compare byte hash, serve HDFS&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">SHADOW_S3&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c1">// Read both, compare byte hash, serve S3&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">S3_ONLY&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c1">// Read only from S3 (post-cutover)&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-java" data-lang="java">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">public&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">class&lt;/span> &lt;span class="nc">StorageReader&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c1">// ... dependencies: hdfs, s3, config&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">public&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kt">byte&lt;/span>&lt;span class="o">[]&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="nf">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">String&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">return&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="k">switch&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">config&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getMode&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">case&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">HDFS_ONLY&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">hdfs&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">case&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">SHADOW_HDFS&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kt">byte&lt;/span>&lt;span class="o">[]&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">data&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">hdfs&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c1">// serve HDFS&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kt">byte&lt;/span>&lt;span class="o">[]&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">shadow&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">s3&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">compareAndEmitMetrics&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">data&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">shadow&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">yield&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">data&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">case&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">SHADOW_S3&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kt">byte&lt;/span>&lt;span class="o">[]&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">data&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">s3&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c1">// serve S3&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kt">byte&lt;/span>&lt;span class="o">[]&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">shadow&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">hdfs&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">compareAndEmitMetrics&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">data&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">shadow&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">yield&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">data&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">case&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">S3_ONLY&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">s3&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">};&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>This guarantees:&lt;/p>
+&lt;ul>
+&lt;li>&lt;mark>Instant rollback&lt;/mark>: Switch back to HDFS in seconds via dynamic config—no redeployment.&lt;/li>
+&lt;li>&lt;mark>Granular rollout&lt;/mark>: Migrateper data path.&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="migration-phases">Migration Phases&lt;/h2>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/047/02_migration_phases.svg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;h3 id="1-plan-the-migration">1) Plan the Migration&lt;/h3>
+&lt;ol>
+&lt;li>Inventory all data to migrate&lt;/li>
+&lt;li>Retire obsolete data&lt;/li>
+&lt;li>Define the migration unit
+&lt;ul>
+&lt;li>Scope migration per data &lt;em>path&lt;/em> rather than per service&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;h3 id="2-build-the-new-implementation">2) Build the New Implementation&lt;/h3>
+&lt;ol>
+&lt;li>&lt;mark>Consolidate reads behind a single interface&lt;/mark>&lt;/li>
+&lt;li>Implement the S3-compatible client&lt;/li>
+&lt;li>Add &lt;mark>per-path dynamic feature flags&lt;/mark>
+&lt;ul>
+&lt;li>Toggle per path at runtime without deployments.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>Add &lt;mark>shadow-read comparison&lt;/mark>
+&lt;ul>
+&lt;li>Read from both S3 and HDFS in parallel and emit a metric comparing byte hashes.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;h3 id="3-upstream-dual-write">3) Upstream Dual-Write&lt;/h3>
+&lt;ol>
+&lt;li>Enable dual-writing across producers
+&lt;ul>
+&lt;li>Update Spark pipelines and upload services to write to S3 object storage alongside HDFS.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;h3 id="4-pilot-migration">4) Pilot Migration&lt;/h3>
+&lt;p>We migrated a small, representative sample of data across different sizes and read frequencies to test the workflow and uncover issues before full rollout.&lt;/p>
+&lt;ol>
+&lt;li>Enable the feature flags
+&lt;ul>
+&lt;li>The service reads from both HDFS and S3, compares byte hashes, and emits diff metrics while still serving verified data.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>Monitor parity and the new S3 storage metrics
+&lt;ul>
+&lt;li>&lt;mark>Correctness&lt;/mark>
+&lt;ul>
+&lt;li>Byte hash match rate&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;mark>Reliability&lt;/mark>
+&lt;ul>
+&lt;li>HTTP 4xx/5xx error rates&lt;/li>
+&lt;li>Connection timeouts and socket drops&lt;/li>
+&lt;li>Client retry counts&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;mark>Performance&lt;/mark>
+&lt;ul>
+&lt;li>Latency&lt;/li>
+&lt;li>Throughput&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;p>The pilot revealed two operational issues:&lt;/p>
+&lt;ul>
+&lt;li>Large object download timeouts: Downloading large objects caused intermittent drops. We fixed this in &lt;a href="#large-object-download">Large Object Download&lt;/a>.&lt;/li>
+&lt;li>S3 cluster instability during pod boot: The new S3 cluster had transient outages, causing pods to enter &lt;code>CrashLoopBackOff&lt;/code> because loading data is required for startup readiness. We fixed this in &lt;a href="#failsafe-k8s-pod-startup">Failsafe K8s Pod Startup&lt;/a>.&lt;/li>
+&lt;/ul>
+&lt;h3 id="5-migration">5) Migration&lt;/h3>
+&lt;p>With the pilot fixes deployed, we migrated all remaining data in batches.&lt;/p>
+&lt;ol>
+&lt;li>Roll out remaining paths under shadow validation&lt;/li>
+&lt;/ol>
+&lt;h3 id="6-cutover">6) Cutover&lt;/h3>
+&lt;ol>
+&lt;li>Disable HDFS writes, switch producers to S3-only writes&lt;/li>
+&lt;li>Turn off HDFS shadow reads&lt;/li>
+&lt;li>Monitor post-cutover metrics
+&lt;ul>
+&lt;li>Zero read/write traffic on HDFS&lt;/li>
+&lt;li>S3 storage metrics&lt;/li>
+&lt;li>Application metrics&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;h3 id="7-shutdown">7) Shutdown&lt;/h3>
+&lt;ol>
+&lt;li>Delete legacy HDFS code &amp;amp; configurations&lt;/li>
+&lt;/ol>
+&lt;br>
+&lt;h2 id="large-object-download">Large Object Download&lt;/h2>
+&lt;p>During the pilot migration, small objects transferred reliably, but large objects intermittently timed out during pod startup.&lt;/p>
+&lt;p>Rather than building custom chunked range request logic, we switched to AWS SDK&amp;rsquo;s native &lt;a href="https://aws.amazon.com/blogs/developer/introducing-crt-based-s3-client-and-the-s3-transfer-manager-in-the-aws-sdk-for-java-2-x/" target="_blank" rel="noopener">CRT-based S3 client&lt;/a> via &lt;code>S3AsyncClient.crtBuilder()&lt;/code>.&lt;/p>
+&lt;br>
+&lt;h2 id="failsafe-k8s-pod-startup">Failsafe K8s Pod Startup&lt;/h2>
+&lt;p>During pilot migration, for some reason S3 storage was unstable which caused pod startup to enter &lt;code>CrashLoopBackOff&lt;/code>. To eliminate this single point of failure, we moved the initial data dependency from startup time to build time: a CI step bakes a data snapshot into the Docker image, allowing pods to startup instantly from local disk before polling S3 for asynchronous updates.&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/047/03_failsafe.svg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>&lt;a href="https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/strangler-fig.html" target="_blank" rel="noopener">https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/strangler-fig.html&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>Building an MLOps Velocity Tool</title><link>https://witsblog.github.io/post/045_mlops_velocity/</link><pubDate>Sat, 27 Jul 2024 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/045_mlops_velocity/</guid><description>&lt;h2 id="ml-pipeline-automation">ML Pipeline Automation&lt;/h2>
+&lt;p>Google&amp;rsquo;s &lt;a href="https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning" target="_blank" rel="noopener">MLOps maturity model&lt;/a> is a useful starting point. It defines three levels — manual experimentation, partial pipeline automation, and full CI/CD/CT for ML.&lt;/p>
+&lt;p>
+&lt;figure id="figure-level-0--manual-training-and-deployment">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/045/01.svg" alt="Level 0 — manual training and deployment" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Level 0 — manual training and deployment
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure id="figure-level-2--full-ml-cicdct-pipeline">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/045/03.svg" alt="Level 2 — full ML CI/CD/CT pipeline" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Level 2 — full ML CI/CD/CT pipeline
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;p>These diagrams describe an ideal. Real teams have to decide which parts matter most, and where they&amp;rsquo;re willing to diverge.&lt;/p>
+&lt;h2 id="where-our-team-sits-and-where-we-diverged">Where Our Team Sits, and Where We Diverged&lt;/h2>
+&lt;p>Our pipeline maps closely to Google&amp;rsquo;s level 2, but we diverged in two places that mattered:&lt;/p>
+&lt;ol>
+&lt;li>&lt;strong>A custom Velocity Tool, not a generic platform.&lt;/strong>
+&lt;ul>
+&lt;li>Ours targets a specific shape of work: an optimization problem where most wins come from iterating on &lt;em>features&lt;/em>, not from swapping out model architectures. A data scientist — or a business user with a feature idea — can take a candidate from &amp;ldquo;SQL in a notebook&amp;rdquo; to &amp;ldquo;running in production traffic&amp;rdquo; without writing pipeline glue.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>In-process inference, not a separate serving cluster.&lt;/strong>
+&lt;ul>
+&lt;li>Most reference architectures spin up a dedicated model-serving cluster. For our latency budget, that was the wrong trade-off, so inference runs inside the same backend process that serves the request. The price is tighter coupling between the model runtime and the application; the gain is a meaningful latency improvement.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;h2 id="the-velocity-tool">The Velocity Tool&lt;/h2>
+&lt;p>The Velocity Tool reframes model development as a &lt;em>declarative&lt;/em> problem. The user describes the experiment they want — a feature, its source, its evaluation context — and the platform handles the rest: data prep, training, backtesting, packaging, and registering the result for review.&lt;/p>
+&lt;p>Each experiment is a DAG of containerized steps, parameterized by a single spec. Roughly:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-yaml" data-lang="yaml">&lt;span class="line">&lt;span class="cl">&lt;span class="nt">experiment&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">feature&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">name&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">my_new_signal&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">source_sql&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">|&lt;/span>&lt;span class="sd">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="sd"> SELECT entity_id, value
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="sd"> FROM raw.events
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="sd"> WHERE event_date = &amp;#39;${datadate}&amp;#39;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">dtype&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">numeric&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">default&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="m">0.0&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">base_dataset&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">weekly_baseline&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">evaluation&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">business_metrics&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="l">primary_metric, guardrail_metric]&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">backtest_window&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">28d&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">promotion_policy&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">requires_human_approval&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>That&amp;rsquo;s the entire surface area a user has to learn. Behind it: a Spark feature build, a training step that produces a versioned artifact, an evaluation step enforcing shared business metrics, and lineage captured for audit. Experiments run in parallel, scheduled by the platform.&lt;/p>
+&lt;h2 id="the-extended-lifecycle-sandbox-and-ab-before-production">The Extended Lifecycle: Sandbox and A/B Before Production&lt;/h2>
+&lt;p>A good backtest number means very little on its own. Backtests can lie about live behaviour, and a model can be statistically &amp;ldquo;better&amp;rdquo; while still violating a business rule no one wrote down. So the pipeline has two stages between training and production:&lt;/p>
+&lt;ol>
+&lt;li>&lt;strong>Sandbox&lt;/strong>
+&lt;ul>
+&lt;li>A model that passed evaluation is replayed against production data, with platform-enforced checks on the output. The point is to fail loudly on what backtests miss — broken feature assumptions, silent regressions on a data segment that matters.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>A/B Experimentation&lt;/strong>
+&lt;ul>
+&lt;li>Model from the sandbox is then deployed in production, running with a real traffic behind a controlled experiment. The user gets the same business-metric report as in training, now computed against real customer behaviour.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/045/04.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>Promotion is a human decision, but its &lt;em>mechanics&lt;/em> are fully automated. No &amp;ldquo;rebuild the artifact for production&amp;rdquo; step, no rewritten glue code. The artifact that won in A/B is the artifact that runs in production. Removing that gap closes off a long list of &amp;ldquo;almost the same code, but not quite&amp;rdquo; bugs.&lt;/p>
+&lt;h2 id="the-hard-part-knowing-its-still-working">The Hard Part: Knowing It&amp;rsquo;s Still Working&lt;/h2>
+&lt;p>Detecting that a deployed model has quietly stopped doing its job is the unsolved problem of MLOps. Three regimes, not equally hard:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>Labels are direct or cheap.&lt;/strong> Sample outputs, label them, measure performance. Solvable.&lt;/li>
+&lt;li>&lt;strong>Labels are absent or biased.&lt;/strong> Pick a proxy metric that correlates with what you care about and monitor that — knowing the proxy will eventually drift, and you&amp;rsquo;ll have to revisit it.&lt;/li>
+&lt;li>&lt;strong>The problem is reinforcement-shaped.&lt;/strong> The model&amp;rsquo;s own actions change the data it sees, so &amp;ldquo;compare prediction to ground truth&amp;rdquo; doesn&amp;rsquo;t apply. Monitoring becomes distributions, business outcomes, and counterfactuals rather than accuracy.&lt;/li>
+&lt;/ul>
+&lt;p>Most of our production models live in the latter two regimes. A model that sets a price in a live marketplace, for example, never gets to observe what the &lt;em>optimal&lt;/em> price would have been — only the outcome at the price it actually showed. The label we want is structurally unobservable, and monitoring this class of system well is one of the challenging problems in MLOps.&lt;/p>
+&lt;h2 id="retrospective">Retrospective&lt;/h2>
+&lt;p>Things from building this that I keep coming back to:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>The spec is the product.&lt;/strong> The declarative thing a user fills in &lt;em>is&lt;/em> the product. The orchestrator, storage layout, and training runtime underneath are implementation details and should be replaceable without breaking that contract.&lt;/li>
+&lt;li>&lt;strong>Standardize the workflow&lt;/strong> The platform has strong opinions about the &lt;em>shape&lt;/em> of an experiment — the spec format, the metrics, the promotion path — and stays out of the way of what goes inside it. That trade is what makes it safe for non-engineers to ship without the platform feeling restrictive.&lt;/li>
+&lt;li>&lt;strong>Observability belongs inside the pipeline.&lt;/strong> Lineage, freshness, volume, and distribution drift are first-class outputs of every run, not a separate dashboard you build afterwards.&lt;/li>
+&lt;li>&lt;strong>Cost should be visible to whoever decides what to run.&lt;/strong> A platform that runs hundreds of experiments a week needs to expose per-run cost to its users, not just track it internally.&lt;/li>
+&lt;/ul>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>&lt;a href="https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning" target="_blank" rel="noopener">MLOps: Continuous delivery and automation pipelines in machine learning — Google Cloud&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://aws.amazon.com/what-is/mlops/" target="_blank" rel="noopener">What is MLOps? — AWS&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>Pricing Experimentation</title><link>https://witsblog.github.io/post/038_pricing_experiment/</link><pubDate>Thu, 13 Jun 2024 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/038_pricing_experiment/</guid><description>&lt;p>When we search for products on an e-commerce, the prices are rarely static. Behind the scenes, hundreds of pricing campaigns run at the same time—special mobile app rates, discounts for specific target, or machine learning models adjusting prices.&lt;/p>
+&lt;p>Before launching a new pricing campaigns to users, we have to test it first: &lt;em>does this campaign actually bring more values?&lt;/em>&lt;/p>
+&lt;p>This is where &lt;strong>pricing experimentation&lt;/strong> comes in.&lt;/p>
+&lt;p>Unlike a simple frontend A/B test (like testing a new button color or page layout), experimenting with prices happens deep inside backend services on the live search path. We have to evaluate business rules, assign experiment variants, and calculate prices accordinly.&lt;/p>
+&lt;br>
+&lt;h2 id="requirements">Requirements&lt;/h2>
+&lt;h3 id="functional-requirements">Functional Requirements&lt;/h3>
+&lt;ul>
+&lt;li>&lt;strong>Campaign &amp;amp; Experiment Management&lt;/strong>
+&lt;ul>
+&lt;li>An internal UI tool for business teams to create pricing rules, set up A/B tests, and go through an approval process before anything goes live.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>Targeting (Segmentation)&lt;/strong>
+&lt;ul>
+&lt;li>The ability to target specific user groups based on request details (e.g., users browsing on mobile, users searching from a specific country, or logged-in members).&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>Allocation Strategies&lt;/strong>
+&lt;ul>
+&lt;li>Support for splitting traffic by different keys (e.g., by user ID, time, etc).&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>Metrics&lt;/strong>
+&lt;ul>
+&lt;li>Collecting data on which users saw which prices so we can measure the business impact (conversion rates, revenue, and margins).&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ul>
+&lt;h3 id="non-functional-requirements">Non-Functional Requirements&lt;/h3>
+&lt;ul>
+&lt;li>&lt;strong>Low Latency&lt;/strong>
+&lt;ul>
+&lt;li>Pricing services handle high request volumes. Checking experiment variant cannot add extra long latency.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>High Availability &amp;amp; Safety&lt;/strong>
+&lt;ul>
+&lt;li>The experimentation system must stay available so A/B experiment is not disrupted.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="campaigns-allocation-experiment">Campaigns, Allocation, Experiment&lt;/h2>
+&lt;p>What each one means:&lt;/p>
+&lt;ol>
+&lt;li>&lt;strong>Campaign:&lt;/strong> The actual pricing rule or discount logic (for example, &amp;ldquo;apply a 5% discount&amp;rdquo;).&lt;/li>
+&lt;li>&lt;strong>Segment:&lt;/strong> The target audience eligible for that rule (for example, &amp;ldquo;mobile users searching in Thailand&amp;rdquo;).&lt;/li>
+&lt;li>&lt;strong>Experiment:&lt;/strong> The A/B test setup that splits traffic into groups:
+&lt;ul>
+&lt;li>&lt;strong>Control Group (Variant A):&lt;/strong> Experiences standard pricing behavior (the baseline).&lt;/li>
+&lt;li>&lt;strong>Treatment Group (Variant B):&lt;/strong> Experiences the new pricing campaign.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;p>Because a single experiment might test multiple campaigns, or a campaign might be reused across tests, we keep them in separate tables linked together:&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/038/01_data_model.svg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>&lt;em>Figure 1: Database schema separating campaign rules, targeting segments, and experiment configurations.&lt;/em>&lt;/p>
+&lt;p>In this setup:&lt;/p>
+&lt;ul>
+&lt;li>The &lt;strong>&lt;code>campaign&lt;/code>&lt;/strong> table stores the pricing logic, schedules, and approval statuses.&lt;/li>
+&lt;li>The &lt;strong>&lt;code>segment&lt;/code>&lt;/strong> table holds the targeting rules evaluated against incoming search requests.&lt;/li>
+&lt;li>The &lt;strong>&lt;code>experiment&lt;/code>&lt;/strong> table links to an &lt;strong>&lt;code>allocation&lt;/code>&lt;/strong> strategy that defines how traffic is split.&lt;/li>
+&lt;li>The &lt;strong>&lt;code>campaign_experiment&lt;/code>&lt;/strong> table acts as a bridge, mapping which specific campaigns are activated for each variant.&lt;/li>
+&lt;/ul>
+&lt;h2 id="deterministic-allocation">Deterministic Allocation&lt;/h2>
+&lt;p>
+&lt;figure id="figure-request-lifecycle-enriching-context-checking-rules-calculating-variants-and-logging">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/038/02_flowchart.svg" alt="Request lifecycle: enriching context, checking rules, calculating variants, and logging" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Request lifecycle: enriching context, checking rules, calculating variants, and logging
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;p>Once a search request matches a targeted segment, how do we decide whether a user gets Variant A or Variant B? This process is called &lt;strong>allocation&lt;/strong>.&lt;/p>
+&lt;p>We cannot query a remote database on every search request to look up or store an assignment—that would add too much latency and introduce a single point of failure. Instead, the service computes the variant locally on the fly using &lt;strong>deterministic hashing&lt;/strong>:&lt;/p>
+&lt;p>$$\text{bucket} = \text{hash}(\text{entity_id}) \pmod{100}$$&lt;/p>
+&lt;p>At a high level:&lt;/p>
+&lt;ol>
+&lt;li>We take an identifier like &lt;code>user_id&lt;/code>.&lt;/li>
+&lt;li>We run it through a fast, uniform hash function and map it into a bucket between 0 and 99.&lt;/li>
+&lt;li>For a 50/50 test, buckets 0–49 get &lt;strong>Variant A&lt;/strong> (Control), and buckets 50–99 get &lt;strong>Variant B&lt;/strong> (Treatment).&lt;/li>
+&lt;/ol>
+&lt;p>Because this is a stateless mathematical calculation, the same user consistently gets the same variant every time they search without storing anything in a database.&lt;/p>
+&lt;p>When running 100+ of experiments simultaneously, there are some real-world challenges. A classic one is experiment correlation. Solving these requires more advanced allocation techniques.&lt;/p>
+&lt;br>
+&lt;h2 id="high-level-architecture">High-Level Architecture&lt;/h2>
+&lt;p>
+&lt;figure id="figure-system-overview">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/038/03_architecture.svg" alt="System overview" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+System overview
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h2 id="integrating-experiments-in-the-code">Integrating Experiments in the Code&lt;/h2>
+&lt;p>When people first think of A/B testing in code, they usually picture a basic &lt;code>if/else&lt;/code> check:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-python" data-lang="python">&lt;span class="line">&lt;span class="cl">&lt;span class="n">request&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">get_request&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">ctx&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">get_context&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">request&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1"># Simple A/B test check&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">if&lt;/span> &lt;span class="n">experiment_client&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">determine_variant&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;EXPERIMENT-ID&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">ctx&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="s2">&amp;#34;B&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">plan_b&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="c1"># Variant B: Treatment&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">else&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">plan_a&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="c1"># Variant A: Control&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>This works well if we only have one or two simple experiments. But in real-world pricing where 100+ of experiments run at the same time across different markets, hardcoding experiment names in code doesn&amp;rsquo;t work. Every new test would require writing code, testing, and deploying.&lt;/p>
+&lt;p>Instead, the pricing service uses a &lt;strong>rule engine&lt;/strong>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-python" data-lang="python">&lt;span class="line">&lt;span class="cl">&lt;span class="n">request&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">get_request&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">ctx&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">get_context&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">request&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1"># 1. Match request against active campaigns&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">eligible_campaigns&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">rule_engine&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">evaluate&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">ctx&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1"># 2. Check experiment variants and apply rules dynamically&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">for&lt;/span> &lt;span class="n">campaign&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">eligible_campaigns&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">variant&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">experiment_client&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">determine_variant&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">campaign&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">experiment_id&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">ctx&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="n">variant&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="s2">&amp;#34;B&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">pricing_calculator&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">apply_rule&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">campaign&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">treatment_rule&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">else&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">pricing_calculator&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">apply_rule&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">campaign&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">control_rule&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>With this approach:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>No deployments needed:&lt;/strong> Business teams can launch, modify, or stop experiments directly from the internal UI without needing an engineer to deploy code.&lt;/li>
+&lt;li>&lt;strong>Handling multiple campaigns:&lt;/strong> The engine can handle conflict resolution and campaigns stacking.&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="references">References&lt;/h2>
+&lt;br></description></item><item><title>Detecting Performance Degradation in CI/CD Pipeline</title><link>https://witsblog.github.io/post/033_performance_ci/</link><pubDate>Sat, 16 Dec 2023 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/033_performance_ci/</guid><description>&lt;h2 id="why">Why?&lt;/h2>
+&lt;p>We want to identify any performance degradation before merging code changes into the production environment. Imagine there is a pull request changing some critical logic in the code in a way that increases latency of a backend service by a lot, and this is detected after deployed to the production!&lt;/p>
+&lt;br>
+&lt;h2 id="the-testing-setup">The Testing Setup&lt;/h2>
+&lt;p>So the basic idea of performance regresssion test is to compare the performance between 2 instances of a backend application; 1 from the baseline (curerntly in production build) and another from the candidate build triggered by a pull request (PR) or a merge request (MR).&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/033/01.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>We also want to ensure the fairness of the test, so the baseline and the candidate versions will be deployed in isolated environment. For this, Kubernetes &lt;a href="https://witsblog.github.io/post/020_k8s_cpu_limit/#should-we-set-the-cpu-limit">CPU Limit&lt;/a> can be used.&lt;/p>
+&lt;p>We can also use tools like &lt;a href="https://k6.io/" target="_blank" rel="noopener">k6&lt;/a> to run the performance test.&lt;/p>
+&lt;br>
+&lt;h2 id="the-gitlab-ciyml">The &lt;code>.gitlab-ci.yml&lt;/code>&lt;/h2>
+&lt;br>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-yaml" data-lang="yaml">&lt;span class="line">&lt;span class="cl">&lt;span class="nt">stages&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="l">docker&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="l">manual&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">app_docker&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">docker&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">script&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># Build docker image&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">artifacts&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">paths&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">performance_regression_test&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">manual&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">extends&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">allow_failure&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kc">true&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">needs&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="nt">job&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">app_docker&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">variables&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">trigger&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">include&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="nt">local&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">.ci/pipelinees/performance_test/pipeline.yaml&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">strategy&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">depend&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">resource_group&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-yaml" data-lang="yaml">&lt;span class="line">&lt;span class="cl">&lt;span class="c"># .ci/pipelinees/performance_test/pipeline.yaml&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">stages&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="l">test setup&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c"># Prepare sample requests, build test runner, deploy baseline &amp;amp; candidate to Kubernetes&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="l">perf test&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c"># Run the perf test by firing requests to the baseline &amp;amp; candidate&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="l">cleanup&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c"># Clean up the Kubernetes resource&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="l">analyze&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c"># Analyze the result, &lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">workflow&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">rules&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="nt">if&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">$CI_MERGE_REQUEST_ID&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="nt">if&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">$CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">deploy_baseline&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">test setup&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">deploy_candidate&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">test setup&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">perf_test_baseline&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">perf test&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">perf_test_candidate&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">perf test&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">cleanup_baseline&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">cleanup&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">cleanup_candidate&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">cleanup&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">analyze_result&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">stage&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">analyze&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">script&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c"># Analyze the result&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;br>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>&lt;a href="https://grafana.com/blog/2021/01/27/k6-vs-jmeter-comparison/" target="_blank" rel="noopener">https://grafana.com/blog/2021/01/27/k6-vs-jmeter-comparison/&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>A Self-Served Feature Store with Feast</title><link>https://witsblog.github.io/post/023_feature_store/</link><pubDate>Sat, 20 May 2023 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/023_feature_store/</guid><description>&lt;br>
+&lt;p>Recently, feature stores have become essential in the MLOps stack, providing a centralized platform to serve features across training and serving enironments. In this post, I will explore how to run a self-served feature store, leveraging an open source project &lt;a href="https://github.com/feast-dev/feast" target="_blank" rel="noopener">Feast&lt;/a>.&lt;/p>
+&lt;br>
+&lt;h2 id="why">Why?&lt;/h2>
+&lt;ul>
+&lt;li>In our team, we have an application that needs to retrieve features for some ML application. At the time there was no feature store provided by the platform team, so we had to roll our own version.&lt;/li>
+&lt;li>Although Feast&amp;rsquo;s &lt;a href="https://github.com/feast-dev/feast/tree/master/sdk/python" target="_blank" rel="noopener">Python SDK&lt;/a> already provides a default implementation to interact with various backed databases for the online store, however, in our production setting, most of our backend applications are written in JVM language. So we need a JVM client library that retrieves features from the feature store.&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="1-understanding-the-feature-store">1) Understanding the Feature Store&lt;/h2>
+&lt;p>In its simplest form, a &lt;strong>feature store&lt;/strong> is a key-value store that stores computed features for retrieval. &lt;a href="https://github.com/feast-dev/feast" target="_blank" rel="noopener">Feast&lt;/a> however is more like an ecosystem around a feature store; it consists of a few important components:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>Registry&lt;/strong>
+&lt;ul>
+&lt;li>An object store of feature definitions and their metadata.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>SDK&lt;/strong>
+&lt;ul>
+&lt;li>The library for interacting within the Feast ecosystem.&lt;/li>
+&lt;li>The client library for ingesting and retrieving features from a feature store.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>Offline Store&lt;/strong>
+&lt;ul>
+&lt;li>The storage that stores the ingested data, which is used for producing training datasets.&lt;/li>
+&lt;li>It supports working with historical time-series feature.&lt;/li>
+&lt;li>This is backed by a different storage and compute engine, for example, Spark, BigQuery, etc.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>Online Store&lt;/strong>
+&lt;ul>
+&lt;li>The storage that sores the lastest feature value, for online, low-latency retrieval.&lt;/li>
+&lt;li>This is usually backed by a low-latency database like Redis, Cassandra, etc.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>Online Serving Service / Feature Server&lt;/strong>
+&lt;ul>
+&lt;li>The service that serves online features from the online store.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ul>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/023/01.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h2 id="2-customizing-the-online-store">2) Customizing the Online Store&lt;/h2>
+&lt;h3 id="21-default-grpc-feature-server">2.1) Default gRPC Feature Server&lt;/h3>
+&lt;p>The default feature server is implemented using the &lt;a href="https://grpc.io/" target="_blank" rel="noopener">gRPC&lt;/a> &lt;a href="https://grpc.io/docs/what-is-grpc/introduction/" target="_blank" rel="noopener">server&lt;/a>, starting with a Google dependency injection framework &lt;a href="https://github.com/google/guice" target="_blank" rel="noopener">Guice&lt;/a>, that creates a &lt;code>io.grpc.Server&lt;/code> instance.&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-java" data-lang="java">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">public&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">class&lt;/span> &lt;span class="nc">ServingGuiceApplication&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">public&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">static&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kt">void&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="nf">main&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">String&lt;/span>&lt;span class="o">[]&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">args&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">throws&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">InterruptedException&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">IOException&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c1">// ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">final&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">Injector&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">i&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">Guice&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">createInjector&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">new&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">ServingServiceV2Module&lt;/span>&lt;span class="p">(),&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">new&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">RegistryConfigModule&lt;/span>&lt;span class="p">(),&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">new&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">InstrumentationConfigModule&lt;/span>&lt;span class="p">(),&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">new&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">ServerModule&lt;/span>&lt;span class="p">(),&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">new&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">ApplicationPropertiesModule&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">args&lt;/span>&lt;span class="p">));&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">Server&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">server&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">i&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getInstance&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Server&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">class&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">server&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">start&lt;/span>&lt;span class="p">();&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">server&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">awaitTermination&lt;/span>&lt;span class="p">();&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>The main logic of the serving service is implemented in the &lt;code>OnlineServingServiceV2&lt;/code> class that implements the gRPC service:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-proto" data-lang="proto">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">service&lt;/span> &lt;span class="n">ServingService&lt;/span> &lt;span class="p">{&lt;/span>&lt;span class="err">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="err">&lt;/span> &lt;span class="c1">// ...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="err">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="err">&lt;/span> &lt;span class="c1">// Get online features synchronously.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">rpc&lt;/span> &lt;span class="n">GetOnlineFeatures&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">GetOnlineFeaturesRequest&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="k">returns&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">GetOnlineFeaturesResponse&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="err">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="err">&lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="err">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>If we look at the constructor of this class, we will see that it uses an instance of &lt;code>OnlineRetriever&lt;/code> to interact with the backed database:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-java" data-lang="java">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">public&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">class&lt;/span> &lt;span class="nc">OnlineServingServiceV2&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">implements&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">ServingServiceV2&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">private&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">static&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">final&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">Logger&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">log&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">org&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">slf4j&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">LoggerFactory&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getLogger&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">OnlineServingServiceV2&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">class&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">private&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">final&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">Optional&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Tracer&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">tracerOptional&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">private&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">final&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">OnlineRetriever&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">retriever&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">private&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">final&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">RegistryRepository&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">registryRepository&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">private&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">final&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">OnlineTransformationService&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">onlineTransformationService&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">private&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">final&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">String&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">project&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c1">// ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">public&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="nf">OnlineServingServiceV2&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">OnlineRetriever&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">retriever&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">RegistryRepository&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">registryRepository&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">OnlineTransformationService&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">onlineTransformationService&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">String&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">project&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">Optional&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Tracer&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">tracerOptional&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">this&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">retriever&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">retriever&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">this&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">registryRepository&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">registryRepository&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">this&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">onlineTransformationService&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">onlineTransformationService&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">this&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">project&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">project&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">this&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">tracerOptional&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">tracerOptional&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c1">// ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>This &lt;code>OnlineServingServiceV2&lt;/code> class is created during the dependency injection and the type of the &lt;code>OnlineRetriever&lt;/code> (and therefore the backed database) is selected at runtime. &lt;mark>If we are to use a different database such as Cassandra, ScyllaDB, etc, as a backed database for the online store, we will have to implement the code here&lt;/mark>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-java" data-lang="java">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">public&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">class&lt;/span> &lt;span class="nc">ServingServiceV2Module&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">extends&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">AbstractModule&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c1">// ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nd">@Provides&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">public&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">ServingServiceV2&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="nf">registryBasedServingServiceV2&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">ApplicationProperties&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">applicationProperties&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">RegistryRepository&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">registryRepository&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">Tracer&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">tracer&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">final&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">ServingServiceV2&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">servingService&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">final&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">ApplicationProperties&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">Store&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">store&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">applicationProperties&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getFeast&lt;/span>&lt;span class="p">().&lt;/span>&lt;span class="na">getActiveStore&lt;/span>&lt;span class="p">();&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">OnlineRetriever&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">retriever&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c1">// TODO: Support more store types, and potentially use a plugin model here.&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">switch&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">store&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getType&lt;/span>&lt;span class="p">())&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c1">// ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">case&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">REDIS&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">RedisClientAdapter&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">redisClient&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">RedisClient&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">create&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">store&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getRedisConfig&lt;/span>&lt;span class="p">());&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">retriever&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">new&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">RedisOnlineRetriever&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">applicationProperties&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getFeast&lt;/span>&lt;span class="p">().&lt;/span>&lt;span class="na">getProject&lt;/span>&lt;span class="p">(),&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">redisClient&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">new&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">EntityKeySerializerV2&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">applicationProperties&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getFeast&lt;/span>&lt;span class="p">().&lt;/span>&lt;span class="na">getEntityKeySerializationVersion&lt;/span>&lt;span class="p">()));&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">break&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c1">// ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">default&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">throw&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="k">new&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">RuntimeException&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">String&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">format&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="s">&amp;#34;Unable to identify online store type: %s for Registry Backed Serving Service&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">store&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getType&lt;/span>&lt;span class="p">()));&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c1">// ...&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">servingService&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">new&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">OnlineServingServiceV2&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">retriever&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">registryRepository&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">onlineTransformationService&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">applicationProperties&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getFeast&lt;/span>&lt;span class="p">().&lt;/span>&lt;span class="na">getProject&lt;/span>&lt;span class="p">(),&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">Optional&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">of&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">tracer&lt;/span>&lt;span class="p">));&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">return&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">servingService&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>This is the (incomplete) class diagram for &lt;code>OnlineServingServiceV2&lt;/code>; it shows some important parts that we have to implement in order to customize the feature server:&lt;/p>
+&lt;div class="mermaid">classDiagram
+class OnlineServingServiceV2 {
+- OnlineRetriever retriever
+- RegistryRepository registryRepository
+- OnlineTransformationService onlineTransformationService
++ GetFeastServingInfoResponse getFeastServingInfo(...)
++ GetOnlineFeaturesResponse getOnlineFeatures(...)
+}
+class OnlineRetriever
+class RegistryRepository {
+- Registry registry
+- RegistryFile registryFile
+}
+class OnlineTransformationService
+class OnlineRetriever {
++ getOnlineFeatures(...)
+}
+class RedisOnlineRetriever
+class CassandraOnlineRetriever
+class RegistryFile {
++ getContent()
++ getContentIfModified()
+}
+class S3RegistryFile
+class GSRegistryFile
+OnlineServingServiceV2 o-- OnlineRetriever
+OnlineServingServiceV2 o-- RegistryRepository
+OnlineServingServiceV2 o-- OnlineTransformationService
+RegistryRepository o-- RegistryFile
+OnlineRetriever &lt;|.. RedisOnlineRetriever
+OnlineRetriever &lt;|.. CassandraOnlineRetriever
+RegistryFile &lt;|.. S3RegistryFile
+RegistryFile &lt;|.. GSRegistryFile
+&lt;/div>
+&lt;br>
+&lt;h3 id="22-feast--scylladb">2.2) Feast + ScyllaDB&lt;/h3>
+&lt;p>We choose ScyllaDB for the online store.&lt;/p>
+&lt;p>With ScyllaDB, the schema looks like this:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-sql" data-lang="sql">&lt;span class="line">&lt;span class="cl">&lt;span class="k">CREATE&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="k">TABLE&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">keyspace_name&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">feature_set&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">entity_key&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="nb">TEXT&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">feature_name&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="nb">TEXT&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">value&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="nb">BLOB&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">event_ts&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="k">TIMESTAMP&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">created_ts&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="k">TIMESTAMP&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">PRIMARY&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="k">KEY&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">((&lt;/span>&lt;span class="n">entity_key&lt;/span>&lt;span class="p">),&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">feature_name&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="k">WITH&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">CLUSTERING&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="k">ORDER&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="k">BY&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">feature_name&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="k">ASC&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>Scylla online retriever implementation&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-java" data-lang="java">&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// ScyllaOnlineRetriever&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="23-client-library-with-client-side-load-balancing">2.3) Client Library with Client Side Load Balancing&lt;/h3>
+&lt;p>After setting up the gRPC &lt;strong>feature server&lt;/strong>, we implement a JVM-based client library for retriving the features. The library integrates &lt;strong>client-side load balancing&lt;/strong> to optimize for performance and to ensure low-latency responses.&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/023/03.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>In gRPC, client-side load balancing can be achieved by creating a Kubernetes &lt;a href="https://kubernetes.io/docs/concepts/services-networking/service/#headless-services" target="_blank" rel="noopener">headless service&lt;/a> to expose all replicas as DNS entry, allowing the client to distribute requests across them:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-yaml" data-lang="yaml">&lt;span class="line">&lt;span class="cl">&lt;span class="nt">apiVersion&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">v1&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">kind&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">Service&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">metadata&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">name&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">grpc-server-java-service&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="nt">spec&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">type&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">ClusterIP&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">selector&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">app&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">server-grpc-java&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">clusterIP&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">None&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">ports&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="nt">port&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="m">50051&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">targetPort&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="m">50051&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>Then in the client library, we set:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-java" data-lang="java">&lt;span class="line">&lt;span class="cl">&lt;span class="n">String&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="s">&amp;#34;grpc-server-java-service.default.svc.cluster.local:50051&amp;#34;&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="n">ManagedChannel&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">channel&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">Grpc&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">newChannelBuilder&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">InsecureChannelCredentials&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">create&lt;/span>&lt;span class="p">())&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">defaultLoadBalancingPolicy&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;round_robin&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">build&lt;/span>&lt;span class="p">();&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>To verify that client-side load balancing does actyally work, we first deploy a set of gRPC feature servers in a Kubernetes cluster with 3 replicas. Afterward, we deploy a client application that uses the client library to distribute requests across these replicas.&lt;/p>
+&lt;p>
+&lt;figure id="figure-4-pods-3-from-grpc-feature-server-1-from-client-code">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/023/04.png" alt="4 pods; 3 from gRPC feature server, 1 from client code" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+4 pods; 3 from gRPC feature server, 1 from client code
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure id="figure-we-can-see-that-the-response-comes-from-3-different-pods-in-the-k8s-cluster">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/023/05.png" alt="We can see that the response comes from 3 different pods in the k8s cluster" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+We can see that the response comes from 3 different pods in the k8s cluster
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>&lt;a href="https://docs.feast.dev/" target="_blank" rel="noopener">https://docs.feast.dev/&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://grpc.io/" target="_blank" rel="noopener">https://grpc.io/&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://kubernetes.io/docs/concepts/services-networking/service/#headless-services" target="_blank" rel="noopener">https://kubernetes.io/docs/concepts/services-networking/service/#headless-services&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://github.com/grpc/grpc/blob/master/doc/load-balancing.md" target="_blank" rel="noopener">https://github.com/grpc/grpc/blob/master/doc/load-balancing.md&lt;/a>&lt;/li>
+&lt;/ul>
+&lt;br></description></item><item><title>Cache At its Finest</title><link>https://witsblog.github.io/post/020_caif/</link><pubDate>Tue, 15 Nov 2022 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/020_caif/</guid><description>&lt;h2 id="cache-types">Cache Types&lt;/h2>
+&lt;h3 id="1-in-memory-cache">1) In-Memory Cache&lt;/h3>
+&lt;p>This uses in-memory data structure to implement a cache, such as &lt;code>ConcurrentHashMap&lt;/code> in Java. If we need other functionalities such as eviction policy, then &lt;code>ConcurrentHashMap&lt;/code> won&amp;rsquo;t provide a convenient way to do that. This is where a library like &lt;a href="https://github.com/ben-manes/caffeine" target="_blank" rel="noopener">Caffeine&lt;/a> comes in.&lt;/p>
+&lt;p>Advantages&lt;/p>
+&lt;ul>
+&lt;li>Super fast.&lt;/li>
+&lt;/ul>
+&lt;p>Disadvantages&lt;/p>
+&lt;ul>
+&lt;li>Data is local to the service instance.&lt;/li>
+&lt;li>Limitted by the memory available to the service instance.&lt;/li>
+&lt;/ul>
+&lt;h3 id="2-distributed-cache">2) Distributed Cache&lt;/h3>
+&lt;p>Distributed cache typically stores data in memory across multiple nodes or servers in order to scale horizontally. Examples include Redis, Couchbase, Memcached, etc.&lt;/p>
+&lt;p>
+&lt;figure id="figure-this-picture-is-not-always-correct-though">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/020/06.png" alt="This picture is not always correct though!" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+This picture is not always correct though!
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;p>So why not just cache in the memory of the service instance?&lt;/p>
+&lt;p>Advantages&lt;/p>
+&lt;ul>
+&lt;li>If cache on service instance, the data will be wiped out every time when the service gets a deployment.&lt;/li>
+&lt;li>Can scale cache independently.&lt;/li>
+&lt;li>Request coalescing. If multiple instances request the same data, distributed cache can deduplicate multiple requests that would have been sent to the backing data store.&lt;/li>
+&lt;/ul>
+&lt;p>Disadvantages&lt;/p>
+&lt;ul>
+&lt;li>Mode complex setup.&lt;/li>
+&lt;/ul>
+&lt;h3 id="3-client-side-caching">3) Client-Side Caching&lt;/h3>
+&lt;p>Advantages&lt;/p>
+&lt;ul>
+&lt;li>Caching on the client side can help reduce server requests&lt;/li>
+&lt;/ul>
+&lt;p>Disadvantages&lt;/p>
+&lt;ul>
+&lt;li>It complicates the analytics as the backend will not receive the request. Will need additional logging in the client to collect metrics.&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="caching-strategies">Caching Strategies&lt;/h2>
+&lt;h3 id="read-strategy">Read Strategy&lt;/h3>
+&lt;h4 id="1-read-aside">1) Read Aside&lt;/h4>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/020/01.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>Advantages&lt;/p>
+&lt;ul>
+&lt;li>Greate for read-heavy loads&lt;/li>
+&lt;li>Only requested data is written to cache&lt;/li>
+&lt;/ul>
+&lt;p>Disadvantages&lt;/p>
+&lt;ul>
+&lt;li>Cache data can be inconsistent if writes are made to database directly.&lt;/li>
+&lt;li>Unavoidable overhead when cache miss (Can mitigate to some extent by &lt;strong>cache warming&lt;/strong>).&lt;/li>
+&lt;/ul>
+&lt;h4 id="2-read-through">2) Read Through&lt;/h4>
+&lt;p>Slight different, where the responsibility of the DB read is shifted to the cache.&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/020/02.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;h3 id="write-strategy">Write Strategy&lt;/h3>
+&lt;h4 id="1-write-through">1) Write Through&lt;/h4>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/020/03.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>Advantages&lt;/p>
+&lt;ul>
+&lt;li>Data is &lt;strong>consistent&lt;/strong>.&lt;/li>
+&lt;/ul>
+&lt;p>Disadvantages&lt;/p>
+&lt;ul>
+&lt;li>Slower writes; every single write goes to both cahce &amp;amp; database.&lt;/li>
+&lt;li>Some data written to cache is never read; unnecessary cost (Can mitigate by setting TTL to reduce space).&lt;/li>
+&lt;/ul>
+&lt;h4 id="2-write-back">2) Write Back&lt;/h4>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/020/04.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>Advantages&lt;/p>
+&lt;ul>
+&lt;li>Faster writes; writes are only made to cache initially. The writes to the DB is postponed until the modified content is about to be evicted or other cache invalidation policy.&lt;/li>
+&lt;/ul>
+&lt;p>Disadvantages&lt;/p>
+&lt;ul>
+&lt;li>More complex.&lt;/li>
+&lt;li>In case of cache failure, the data may be permanently lost.&lt;/li>
+&lt;/ul>
+&lt;h4 id="3-write-around">3) Write Around&lt;/h4>
+&lt;p>In this approach, the application only writes to the DB.&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/020/05.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h2 id="monitoring">Monitoring&lt;/h2>
+&lt;br>
+&lt;h2 id="we-cache-a-cache-that-caches-another-cache">We Cache a Cache, that Caches Another Cache!&lt;/h2>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/post/020_caif/featured.jpeg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>&lt;a href="https://en.wikipedia.org/wiki/Cache_%28computing%29" target="_blank" rel="noopener">https://en.wikipedia.org/wiki/Cache_%28computing%29&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://docs.aws.amazon.com/whitepapers/latest/database-caching-strategies-using-redis/caching-patterns.html" target="_blank" rel="noopener">https://docs.aws.amazon.com/whitepapers/latest/database-caching-strategies-using-redis/caching-patterns.html&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://stackoverflow.com/questions/23355136/cache-reads-and-writes" target="_blank" rel="noopener">https://stackoverflow.com/questions/23355136/cache-reads-and-writes&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>Continuous Training with TFX and Kubeflow Pipelines</title><link>https://witsblog.github.io/post/012_tfx_google_ai_platform/</link><pubDate>Sun, 10 Oct 2021 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/012_tfx_google_ai_platform/</guid><description>&lt;p>In this post I will be exploring the TFX and its integration with Kubeflow Pipelines on Google AI Platform.&lt;/p>
+&lt;p>This post is kind of my summarization for my learning purpose.&lt;/p>
+&lt;h2 id="1-dataset">1) Dataset&lt;/h2>
+&lt;h2 id="2-create-clusters">2) Create Clusters&lt;/h2>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/01.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/04.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/05.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/06.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h2 id="3-understanding-tfx-pipelines">3) Understanding TFX Pipelines&lt;/h2>
+&lt;p>In order to understand TFX pipelines, we need to understand some keywords. For full tutorial, refer to TensorFlow&amp;rsquo;s article &lt;a href="https://www.tensorflow.org/tfx/guide/understanding_tfx_pipelines" target="_blank" rel="noopener">here&lt;/a>.&lt;/p>
+&lt;h3 id="artifact">Artifact&lt;/h3>
+&lt;p>Artifacts are the output of the steps in a TFX pipeline. They can be used by subsequent steps in the pipeline.&lt;/p>
+&lt;p>Artifacts must be stongly typed with an &lt;strong>artifact type&lt;/strong> registered in the &lt;a href="https://www.tensorflow.org/tfx/guide/mlmd" target="_blank" rel="noopener">ML Metadata&lt;/a> store. This point is not very clear yet; I need to research and will come back to expand more on this later.&lt;/p>
+&lt;p>Questions&lt;/p>
+&lt;ul>
+&lt;li>Where does artifact get stored?&lt;/li>
+&lt;li>What needs to be changed if we run the pipeline on a Cloud?&lt;/li>
+&lt;/ul>
+&lt;h3 id="parameter">Parameter&lt;/h3>
+&lt;p>Parameters are something that we can set through configuration, instead of hard coding; they are just like the hyperparameters of a ML/DL model.&lt;/p>
+&lt;h3 id="component">Component&lt;/h3>
+&lt;p>Component is an implementation of the task in our pipeline. Components in TFX are composed of&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>Component specification&lt;/strong>: This defines the component&amp;rsquo;s input and output artifacts, and component&amp;rsquo;s parameters.&lt;/li>
+&lt;li>&lt;strong>Executor&lt;/strong>: This implements the real work of a step in the pipeline.&lt;/li>
+&lt;li>&lt;strong>Component interface&lt;/strong>: This packages the component specification and executor for use in a pipeline. (This is not very clear.)&lt;/li>
+&lt;/ul>
+&lt;p>Questions&lt;/p>
+&lt;ul>
+&lt;li>Where does the component get run?&lt;/li>
+&lt;li>Do components run in the same environment? Same OS and same dependencies?&lt;/li>
+&lt;li>What if each component requires different dependencies?&lt;/li>
+&lt;/ul>
+&lt;h3 id="pipeline">Pipeline&lt;/h3>
+&lt;p>TensorFlow says that a TFX pipeline is a &lt;em>&lt;strong>portable&lt;/strong>&lt;/em> implementation of an ML workflow, as it can be run on different ochestrators, such as: Apache Airflow, Apache Beam, and Kubeflow Pipelines.&lt;/p>
+&lt;p>First, we build a pipeline, which is of type &lt;code>tfx.orchestration.pipeline.Pipeline&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-python" data-lang="python">&lt;span class="line">&lt;span class="cl">&lt;span class="kn">from&lt;/span> &lt;span class="nn">tfx.orchestration&lt;/span> &lt;span class="kn">import&lt;/span> &lt;span class="n">pipeline&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">def&lt;/span> &lt;span class="nf">_create_pipeline&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="o">-&amp;gt;&lt;/span> &lt;span class="n">pipeline&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">Pipeline&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;&amp;#34;&amp;#34;
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s2"> &amp;#34;&amp;#34;&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">pass&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>To select a different ochestration tool, we need to import from &lt;code>tfx.orchestration&lt;/code> module.&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-python" data-lang="python">&lt;span class="line">&lt;span class="cl">&lt;span class="c1"># Airflow&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kn">from&lt;/span> &lt;span class="nn">tfx.orchestration.airflow.airflow_dag_runner&lt;/span> &lt;span class="kn">import&lt;/span> &lt;span class="n">AirflowDagRunner&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kn">from&lt;/span> &lt;span class="nn">tfx.orchestration.airflow.airflow_dag_runner&lt;/span> &lt;span class="kn">import&lt;/span> &lt;span class="n">AirflowPipelineConfig&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">DAG&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">AirflowDagRunner&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">AirflowPipelineConfig&lt;/span>&lt;span class="p">())&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">run&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">_create_pipeline&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-python" data-lang="python">&lt;span class="line">&lt;span class="cl">&lt;span class="c1"># Kubeflow&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kn">from&lt;/span> &lt;span class="nn">tfx.orchestration.kubeflow&lt;/span> &lt;span class="kn">import&lt;/span> &lt;span class="n">kubeflow_dag_runner&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">kubeflow_dag_runner&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">KubeflowDagRunner&lt;/span>&lt;span class="p">()&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">run&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">create_pipeline&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;br>
+&lt;h2 id="4-tfx-custom-components">4) TFX Custom Components&lt;/h2>
+&lt;p>Understanding the custom components will get us far! Refer to TensorFlow&amp;rsquo;s article &lt;a href="https://www.tensorflow.org/tfx/guide/understanding_custom_components" target="_blank" rel="noopener">here&lt;/a>.&lt;/p>
+&lt;h3 id="tfx-components-at-runtime">TFX components at runtime&lt;/h3>
+&lt;blockquote>
+&lt;p>When a pipeline runs a TFX component, the component is executed in three phases:&lt;/p>
+&lt;ol>
+&lt;li>First, the Driver uses the component specification to retrieve the required artifacts from the metadata store and pass them into the component.&lt;/li>
+&lt;li>Next, the Executor performs the component&amp;rsquo;s work.&lt;/li>
+&lt;li>Then the Publisher uses the component specification and the results from the executor to store the component&amp;rsquo;s outputs in the metadata store.&lt;/li>
+&lt;/ol>
+&lt;/blockquote>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/component.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;h3 id="types-of-custom-components">Types of custom components&lt;/h3>
+&lt;ol>
+&lt;li>
+&lt;p>&lt;strong>Python function-based&lt;/strong> components&lt;/p>
+&lt;ul>
+&lt;li>The specification is completely defined in the Python code.&lt;/li>
+&lt;li>The function&amp;rsquo;s arguments with type annotations describe input artifact, output artifact, and parameters.&lt;/li>
+&lt;li>The function&amp;rsquo;s body defines the component&amp;rsquo;s executor.&lt;/li>
+&lt;li>The component interface is dedined by adding &lt;code>@component&lt;/code> decorator.&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-python" data-lang="python">&lt;span class="line">&lt;span class="cl">&lt;span class="nd">@component&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">def&lt;/span> &lt;span class="nf">MyComponent&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">model&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="n">InputArtifact&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">Model&lt;/span>&lt;span class="p">],&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">output&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="n">OutputArtifact&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">Model&lt;/span>&lt;span class="p">],&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">threshold&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="n">Parameter&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="nb">int&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">10&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">)&lt;/span> &lt;span class="o">-&amp;gt;&lt;/span> &lt;span class="n">OutputDict&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">accuracy&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="nb">float&lt;/span>&lt;span class="p">):&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;&amp;#34;&amp;#34;
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s2"> &amp;#34;&amp;#34;&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">pass&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>Container-based&lt;/strong> components&lt;/p>
+&lt;ul>
+&lt;li>This is suitable for building a component with custom runtime environment and dependencies.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>Fully custom&lt;/strong> components&lt;/p>
+&lt;ul>
+&lt;li>This is for building a component that is not in the built-in TFX standard components.&lt;/li>
+&lt;li>It lets us build a component by implementing a custom &lt;em>component specification&lt;/em>, &lt;em>executor&lt;/em>, and &lt;em>component interface&lt;/em> classes.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;h2 id="5-code">5) Code&lt;/h2>
+&lt;br>
+&lt;h2 id="6-pipeline-dashboard">6) Pipeline Dashboard&lt;/h2>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/10.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/11.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/13.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/15_2.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/16_2.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/17_1.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/17_2.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h2 id="7-dataflow">7) Dataflow&lt;/h2>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/19.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/20.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/21.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/22.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/012/24.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h2 id="my-thoughts">My Thoughts&lt;/h2>
+&lt;ul>
+&lt;li>TFX seems to be built around TensorFlow. Not very sure if it’s gonna work with other DL/ML libraries without heavily modifying the TFX components. But if we are in a Google Cloud/TensorFlow ecosystem, stick with it!&lt;/li>
+&lt;li>Unlike TFX, &lt;a href="https://mlflow.org/" target="_blank" rel="noopener">MLFlow&lt;/a> seems to be more general and more open to other DL/ML libraries.&lt;/li>
+&lt;/ul>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>&lt;a href="https://www.tensorflow.org/tfx/tutorials" target="_blank" rel="noopener">https://www.tensorflow.org/tfx/tutorials&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://www.tensorflow.org/tfx/guide/mlmd" target="_blank" rel="noopener">https://www.tensorflow.org/tfx/guide/mlmd&lt;/a>&lt;/li>
+&lt;/ul></description></item></channel></rss>

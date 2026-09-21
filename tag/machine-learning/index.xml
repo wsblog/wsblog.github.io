@@ -1,0 +1,347 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Machine Learning | Wit's Blog</title><link>https://witsblog.github.io/tag/machine-learning/</link><atom:link href="https://witsblog.github.io/tag/machine-learning/index.xml" rel="self" type="application/rss+xml"/><description>Machine Learning</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-us</language><lastBuildDate>Thu, 07 Oct 2021 00:00:00 +0700</lastBuildDate><image><url>https://witsblog.github.io/media/icon_hu66cf44b0d2eab4dae9de00f68d847da7_1567_512x512_fill_lanczos_center_3.png</url><title>Machine Learning</title><link>https://witsblog.github.io/tag/machine-learning/</link></image><item><title>AI &amp; Robotics Hackathon 2021</title><link>https://witsblog.github.io/post/011_arv_hackathon_2021/</link><pubDate>Thu, 07 Oct 2021 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/011_arv_hackathon_2021/</guid><description>&lt;p>&lt;a href="https://www.linkedin.com/posts/ai-and-robotics-ventures_arv-hackathon2021-subseamachinelearningtrack-activity-6874958167609106432-aQU9?utm_source=share&amp;amp;utm_medium=member_desktop" target="_blank" rel="noopener">ARV Hackathon 2021&lt;/a> is back with the new and even more challenging problem statements that dare you to find innovative solutions in Cyber Security and Subsea Machine Learning spaces.&lt;/p>
+&lt;p>All tech talents, start-ups, and the next generation innovators are invited to join ARV in creating the innovative technological solutions that will transform the future of Thailand and Southeast Asia.&lt;/p>
+&lt;p>Stay Tuned!&lt;/p></description></item><item><title>Facebook’s News Feed Ranking Algorithm</title><link>https://witsblog.github.io/post/010_fb_ranking/</link><pubDate>Sun, 11 Jul 2021 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/010_fb_ranking/</guid><description/></item><item><title>EfficientDet: Towards Scalable Architecture in AutoML</title><link>https://witsblog.github.io/post/009_auto_ml/</link><pubDate>Sat, 10 Jul 2021 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/009_auto_ml/</guid><description>&lt;h2 id="anchor-boxes">Anchor Boxes&lt;/h2>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/009/anchors_level_3.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/009/anchors_level_4.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/009/anchors_level_5.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/009/anchors_level_6.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/009/anchors_level_7.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;h2 id="data-pipeline">Data Pipeline&lt;/h2>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/009/img_original.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/009/img_resize.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>Mingxing Tan, Ruoming Pang, Quoc V. Le. &lt;a href="https://arxiv.org/abs/1911.09070" target="_blank" rel="noopener">EfficientDet: Scalable and Efficient Object Detection&lt;/a>. CVPR 2020.&lt;/li>
+&lt;/ul></description></item><item><title>DARTS: Differentiable Architecture Search</title><link>https://witsblog.github.io/post/008_darts/</link><pubDate>Mon, 21 Jun 2021 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/008_darts/</guid><description>&lt;p>Differentiable Architecture Search&lt;/p>
+$$
+\begin{aligned}
+&amp;&amp; \min_{\alpha} &amp;&amp;&amp; \mathcal{L}_{val} (w^{\ast} (\alpha), \alpha) \\
+&amp;&amp; \text{s.t.} &amp;&amp;&amp; w^{\ast} (\alpha) = \text{argmin}_{w} \space \mathcal{L}_{train} (w, \alpha) \\
+\end{aligned}
+$$</description></item><item><title>Waymo Open Dataset</title><link>https://witsblog.github.io/post/007_explore_waymo_perception/</link><pubDate>Mon, 21 Jun 2021 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/007_explore_waymo_perception/</guid><description>&lt;blockquote>
+&lt;p>The most successful ML projects in production (Tesla, iPhone, Amazon drones, Zipline) are where you own the entire stack. They iterate not just ML algorithms but also: 1) how to collect/label data, 2) infrastructure, 3) hardware ML models run on.&lt;/p>
+&lt;/blockquote>
+&lt;p>Summarizing Andrej Karpathy&amp;rsquo;s CVPR talk, Chip Huyen &lt;a href="https://twitter.com/chipro/status/1407890489697652741" target="_blank" rel="noopener">highlighted&lt;/a> that the most successful ML projects in production are those that have complete ownership of the entire stack. These projects iterate not only on ML algorithms but also on data collection and labeling, infrastructure, and the hardware on which ML models operate.&lt;/p>
+&lt;p>Waymo, another major player, released its dataset in 2019, which is in &lt;a href="https://www.tensorflow.org/tutorials/load_data/tfrecord" target="_blank" rel="noopener">TFRecord&lt;/a> format, requiring TensorFlow for reading. This heavy dependence on TensorFlow makes the tools and data preprocessing pipeline less compatible with other frameworks. In contrast, datasets like KITTI, Lyft, TRI, and Argoverse are released in a simpler, raw format. As someone who used PyTorch more than TensorFlow, I found it difficult to inspect and debug the &lt;a href="https://www.tensorflow.org/guide/data" target="_blank" rel="noopener">&lt;code>tf.data&lt;/code>&lt;/a> components when eager execution &lt;em>was&lt;/em> not available inside &lt;code>tf.data&lt;/code>.&lt;/p>
+&lt;p>After a year and listening to Andrej Karpathy&amp;rsquo;s talk at CVPR 2021, I now kind of appreciate why Google&amp;rsquo;s Waymo chose to release their dataset in TFRecord format. Interestingly, the winner of the Challenge used PyTorch though.&lt;/p>
+&lt;p>The good news is&amp;hellip; we can now use:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-python" data-lang="python">&lt;span class="line">&lt;span class="cl">&lt;span class="c1"># TensorFlow 2.5&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">tf&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">data&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">experimental&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">enable_debug_mode&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>Enough for the introduction, let&amp;rsquo;s visualize the data.&lt;/p>
+&lt;h2 id="visualizing-camera-data">Visualizing Camera Data&lt;/h2>
+&lt;p>Most of the code is straightforward.&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-python" data-lang="python">&lt;span class="line">&lt;span class="cl">&lt;span class="kn">import&lt;/span> &lt;span class="nn">tensorflow&lt;/span> &lt;span class="k">as&lt;/span> &lt;span class="nn">tf&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kn">import&lt;/span> &lt;span class="nn">matplotlib.pyplot&lt;/span> &lt;span class="k">as&lt;/span> &lt;span class="nn">plt&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kn">import&lt;/span> &lt;span class="nn">matplotlib.patches&lt;/span> &lt;span class="k">as&lt;/span> &lt;span class="nn">patches&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1"># Replace FILENAME with tfrecord file&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">dataset&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">tf&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">data&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">TFRecordDataset&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">FILENAME&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">compression_type&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s1">&amp;#39;&amp;#39;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">for&lt;/span> &lt;span class="n">data&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">dataset&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">frame&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">open_dataset&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">Frame&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">frame&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">ParseFromString&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nb">bytearray&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">data&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">numpy&lt;/span>&lt;span class="p">()))&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">plt&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">figure&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1"># Draw the camera labels.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">count&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">0&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">for&lt;/span> &lt;span class="n">camera_image&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">frame&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">images&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">for&lt;/span> &lt;span class="n">camera_labels&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">frame&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">camera_labels&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1"># Ignore camera labels that do not correspond to this camera.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="n">camera_labels&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">camera_image&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">name&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">continue&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">count&lt;/span> &lt;span class="o">+=&lt;/span> &lt;span class="mi">1&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">ax&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">plt&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">subplot&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">2&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">3&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">count&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1"># Iterate over the individual labels.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">for&lt;/span> &lt;span class="n">label&lt;/span> &lt;span class="ow">in&lt;/span> &lt;span class="n">camera_labels&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">labels&lt;/span>&lt;span class="p">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1"># Draw the object bounding box.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">ax&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">add_patch&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">patches&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">Rectangle&lt;/span>&lt;span class="p">(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">xy&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">label&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">box&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">center_x&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="mf">0.5&lt;/span> &lt;span class="o">*&lt;/span> &lt;span class="n">label&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">box&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">length&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">label&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">box&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">center_y&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="mf">0.5&lt;/span> &lt;span class="o">*&lt;/span> &lt;span class="n">label&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">box&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">width&lt;/span>&lt;span class="p">),&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">width&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">label&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">box&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">length&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">height&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">label&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">box&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">width&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">linewidth&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">edgecolor&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s1">&amp;#39;red&amp;#39;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">facecolor&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="s1">&amp;#39;none&amp;#39;&lt;/span>&lt;span class="p">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1"># Show the camera image.&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">plt&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">imshow&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">tf&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">image&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">decode_jpeg&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">camera_image&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">image&lt;/span>&lt;span class="p">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">plt&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">title&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">camera_image&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">name&lt;/span>&lt;span class="p">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">plt&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">grid&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kc">False&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">plt&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">axis&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;off&amp;#39;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">plt&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">show&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">plt&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">close&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;br>
+&lt;p>The following shows some of the dataset.&lt;/p>
+&lt;div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+&lt;iframe src="https://www.youtube.com/embed/inUtJcAszXI" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" allowfullscreen title="YouTube Video">&lt;/iframe>
+&lt;/div>
+&lt;br>
+&lt;div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+&lt;iframe src="https://www.youtube.com/embed/S4ZGBSAm7uo" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" allowfullscreen title="YouTube Video">&lt;/iframe>
+&lt;/div>
+&lt;br>
+&lt;div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+&lt;iframe src="https://www.youtube.com/embed/h8X3_4qeGI4" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" allowfullscreen title="YouTube Video">&lt;/iframe>
+&lt;/div>
+&lt;br>
+&lt;div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+&lt;iframe src="https://www.youtube.com/embed/UwI7cWSBmLo" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" allowfullscreen title="YouTube Video">&lt;/iframe>
+&lt;/div>
+&lt;br>
+&lt;h2 id="dataset-statistics">Dataset Statistics&lt;/h2>
+&lt;h3 id="3d-labels">3D Labels&lt;/h3>
+&lt;div id="chart-316259874" class="chart">&lt;/div>
+&lt;script>
+(function() {
+let a = setInterval( function() {
+if ( typeof window.Plotly === 'undefined' ) {
+return;
+}
+clearInterval( a );
+Plotly.d3.json("./lwh_3d_waymo.json", function(chart) {
+Plotly.plot('chart-316259874', chart.data, chart.layout, {responsive: true});
+});
+}, 500 );
+})();
+&lt;/script>
+&lt;div id="chart-641529837" class="chart">&lt;/div>
+&lt;script>
+(function() {
+let a = setInterval( function() {
+if ( typeof window.Plotly === 'undefined' ) {
+return;
+}
+clearInterval( a );
+Plotly.d3.json("./histogram_l.json", function(chart) {
+Plotly.plot('chart-641529837', chart.data, chart.layout, {responsive: true});
+});
+}, 500 );
+})();
+&lt;/script>
+&lt;div id="chart-816297453" class="chart">&lt;/div>
+&lt;script>
+(function() {
+let a = setInterval( function() {
+if ( typeof window.Plotly === 'undefined' ) {
+return;
+}
+clearInterval( a );
+Plotly.d3.json("./histogram_w.json", function(chart) {
+Plotly.plot('chart-816297453', chart.data, chart.layout, {responsive: true});
+});
+}, 500 );
+})();
+&lt;/script>
+&lt;div id="chart-324916857" class="chart">&lt;/div>
+&lt;script>
+(function() {
+let a = setInterval( function() {
+if ( typeof window.Plotly === 'undefined' ) {
+return;
+}
+clearInterval( a );
+Plotly.d3.json("./histogram_h.json", function(chart) {
+Plotly.plot('chart-324916857', chart.data, chart.layout, {responsive: true});
+});
+}, 500 );
+})();
+&lt;/script>
+&lt;h3 id="2d-labels">2D Labels&lt;/h3>
+&lt;div id="chart-812469735" class="chart">&lt;/div>
+&lt;script>
+(function() {
+let a = setInterval( function() {
+if ( typeof window.Plotly === 'undefined' ) {
+return;
+}
+clearInterval( a );
+Plotly.d3.json("./bbox_compare.json", function(chart) {
+Plotly.plot('chart-812469735', chart.data, chart.layout, {responsive: true});
+});
+}, 500 );
+})();
+&lt;/script></description></item><item><title>Data Science &amp; Machine Learning In Oil And Gas Industry</title><link>https://witsblog.github.io/post/005_data_sci_pttep_arv/</link><pubDate>Mon, 25 Jan 2021 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/005_data_sci_pttep_arv/</guid><description>&lt;h2 id="introduction">Introduction&lt;/h2>
+&lt;p>The Oil and Gas industry is one of the most lucrative industries that has a very high operating cost. Cutting costs is therefore a major priority when it comes to this business. In this post, I share some of the mahcine learning (or data science, if you will) applications that I have worked on.&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/005/post_05-01.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/005/post_05-02.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/005/post_05-03.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/005/post_05-04.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;div id="chart-152786349" class="chart">&lt;/div>
+&lt;script>
+(function() {
+let a = setInterval( function() {
+if ( typeof window.Plotly === 'undefined' ) {
+return;
+}
+clearInterval( a );
+Plotly.d3.json("./pipe.json", function(chart) {
+Plotly.plot('chart-152786349', chart.data, chart.layout, {responsive: true});
+});
+}, 500 );
+})();
+&lt;/script>
+&lt;br>
+&lt;div id="chart-839526714" class="chart">&lt;/div>
+&lt;script>
+(function() {
+let a = setInterval( function() {
+if ( typeof window.Plotly === 'undefined' ) {
+return;
+}
+clearInterval( a );
+Plotly.d3.json("./series.json", function(chart) {
+Plotly.plot('chart-839526714', chart.data, chart.layout, {responsive: true});
+});
+}, 500 );
+})();
+&lt;/script>
+&lt;br>
+&lt;div id="chart-467591382" class="chart">&lt;/div>
+&lt;script>
+(function() {
+let a = setInterval( function() {
+if ( typeof window.Plotly === 'undefined' ) {
+return;
+}
+clearInterval( a );
+Plotly.d3.json("./data.json", function(chart) {
+Plotly.plot('chart-467591382', chart.data, chart.layout, {responsive: true});
+});
+}, 500 );
+})();
+&lt;/script>
+&lt;br>
+&lt;div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+&lt;iframe src="https://www.youtube.com/embed/LCgLtspSjBk" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" allowfullscreen title="YouTube Video">&lt;/iframe>
+&lt;/div></description></item><item><title>Real-time 3D Object Detection from Point Clouds</title><link>https://witsblog.github.io/post/002_3d_object_detection/</link><pubDate>Wed, 30 Oct 2019 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/002_3d_object_detection/</guid><description>&lt;h2 id="1-introduction">1. Introduction&lt;/h2>
+&lt;h2 id="2-model-implementation">2. Model Implementation&lt;/h2>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/002/pixor_model.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;h2 id="3-initial-results">3. Initial Results&lt;/h2>
+&lt;h3 id="31-single-class-detection">3.1 Single Class Detection&lt;/h3>
+&lt;h3 id="simple-scenes">Simple Scenes&lt;/h3>
+&lt;p>Currently the model is trained on a single class: &lt;code>car&lt;/code>. For the following result, green indicates the ground truth labels, and light blue indicates the predicted results.&lt;/p>
+&lt;p>In a simple scene, the model seems to recognize all the car objects:&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/002/model_6000_img_64.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/002/model_6000_img_83.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;h3 id="harder">Harder&lt;/h3>
+&lt;p>Since the model is trained using only the top view LIDAR data, it is reasonable that the model can miss the cases where thr LIDAR point cloud of the object is sparse:&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/002/img_95_3dbox_gt.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/002/model_6000_img_95.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/002/model_6000_img_95_top.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/002/model_6000_img_95_sparse_top.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;h3 id="easy-mistake">Easy Mistake&lt;/h3>
+&lt;p>However, the model still misses some obvious detection, such as in the following scene. Here, the front car in the very middle doesn&amp;rsquo;t get detected.&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/002/img_49_3dbox_gt.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/002/model_6000_img_49.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;h3 id="why-top-view">Why Top View?&lt;/h3>
+&lt;p>What I think the top view (or bird&amp;rsquo;s eye view) approach can do well is that: It can detect the objects which are occluded in the front camera view. If we look at the following image, the car on the very right of the image is largely occluded:&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/002/zoom.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/002/model_6000_img_99_front.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>However, viewing the point cloud from the top, these 2 cars are clearly separated in the space, and therefore the model can easily detect the targeted objects:&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/002/model_6000_img_99_occlusion_top.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;h3 id="32-multi-class-detection">3.2 Multi-Class Detection&lt;/h3>
+&lt;h2 id="4-final-results">4. Final Results&lt;/h2>
+&lt;h2 id="5-my-thoughts">5. My Thoughts&lt;/h2>
+&lt;h2 id="6-references">6. References&lt;/h2>
+&lt;ul>
+&lt;li>H. Su, S. Maji, E. Kalogerakis, and E. G. Learned-Miller. &lt;a href="">Multi-view convolutional neural networks for 3d shaperecognition&lt;/a> ICCV, 2015&lt;/li>
+&lt;li>Bin Yang, Wenjie Luo, and Raquel Urtasun. &lt;a href="">PIXOR: Real-time 3d object detection from point clouds&lt;/a> CVPR, 2018&lt;/li>
+&lt;/ul></description></item></channel></rss>

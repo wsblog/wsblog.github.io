@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 360" width="1020" height="360"
+     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+
+  <text x="10" y="18" font-size="13" fill="#64748b">Zero-downtime storage migration lifecycle</text>
+
+  <!-- vertical guide lines -->
+  <g stroke="#f1f5f9" stroke-width="1.5">
+    <line x1="280" y1="34" x2="280" y2="326"/>
+    <line x1="375" y1="34" x2="375" y2="326"/>
+    <line x1="470" y1="34" x2="470" y2="326"/>
+    <line x1="565" y1="34" x2="565" y2="326"/>
+    <line x1="660" y1="34" x2="660" y2="326"/>
+    <line x1="755" y1="34" x2="755" y2="326"/>
+    <line x1="850" y1="34" x2="850" y2="326"/>
+  </g>
+
+  <!-- rows: label, bar, annotation -->
+
+  <!-- 1. Plan the Migration -->
+  <text x="10" y="58" font-size="13" fill="#334155" font-weight="500">1. Plan the Migration</text>
+  <rect x="280" y="44" width="95" height="22" rx="4" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5"/>
+
+  <!-- 2. Build the New Implementation -->
+  <text x="10" y="98" font-size="13" fill="#334155" font-weight="500">2. Build the New Implementation</text>
+  <rect x="375" y="84" width="95" height="22" rx="4" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="480" y="99" font-size="11" fill="#2563eb" font-style="italic">consumer facade &amp; flags</text>
+
+  <!-- 3. Upstream Dual-Write (Parallel with 2) -->
+  <text x="10" y="138" font-size="13" fill="#334155" font-weight="500">3. Upstream Dual-Write</text>
+  <rect x="375" y="124" width="95" height="22" rx="4" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="480" y="139" font-size="11" fill="#7c3aed" font-style="italic">producers write both stores</text>
+
+  <!-- 4. Pilot Migration -->
+  <text x="10" y="178" font-size="13" fill="#334155" font-weight="500">4. Pilot Migration</text>
+  <rect x="470" y="164" width="95" height="22" rx="4" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+  <text x="575" y="179" font-size="11" fill="#b45309" font-style="italic">shadow reads on sample</text>
+
+  <!-- 5. Migration -->
+  <text x="10" y="218" font-size="13" fill="#334155" font-weight="500">5. Migration</text>
+  <rect x="565" y="204" width="95" height="22" rx="4" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+  <text x="670" y="219" font-size="11" fill="#b45309" font-style="italic">batch rollout across all paths</text>
+
+  <!-- 6. Cutover -->
+  <text x="10" y="258" font-size="13" fill="#334155" font-weight="500">6. Cutover</text>
+  <rect x="660" y="244" width="95" height="22" rx="4" fill="#ffedd5" stroke="#c2410c" stroke-width="1.5"/>
+  <text x="765" y="259" font-size="11" fill="#c2410c" font-style="italic">S3-only writes &amp; reads</text>
+
+  <!-- 7. Shutdown -->
+  <text x="10" y="298" font-size="13" fill="#334155" font-weight="500">7. Shutdown</text>
+  <rect x="755" y="284" width="95" height="22" rx="4" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="860" y="299" font-size="11" fill="#16a34a" font-style="italic">delete legacy code &amp; configs</text>
+
+  <line x1="0" y1="326" x2="1020" y2="326" stroke="#cbd5e1" stroke-width="1"/>
+</svg>

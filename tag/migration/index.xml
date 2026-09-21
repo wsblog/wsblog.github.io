@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Migration | Wit's Blog</title><link>https://witsblog.github.io/tag/migration/</link><atom:link href="https://witsblog.github.io/tag/migration/index.xml" rel="self" type="application/rss+xml"/><description>Migration</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-us</language><lastBuildDate>Mon, 21 Sep 2026 00:00:00 +0700</lastBuildDate><image><url>https://witsblog.github.io/media/icon_hu66cf44b0d2eab4dae9de00f68d847da7_1567_512x512_fill_lanczos_center_3.png</url><title>Migration</title><link>https://witsblog.github.io/tag/migration/</link></image><item><title>Migrating a Legacy Experimentation Engine and its Live DB with Zero Downtime</title><link>https://witsblog.github.io/post/086_experimentation_migration/</link><pubDate>Mon, 21 Sep 2026 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/086_experimentation_migration/</guid><description>&lt;br>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>&lt;a href="https://witsblog.github.io/post/038_pricing_experiment/">Pricing experimentation&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>Migrating HDFS to S3 Object Storage with Zero Downtime</title><link>https://witsblog.github.io/post/047_object_storage_migration/</link><pubDate>Wed, 21 Aug 2024 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/047_object_storage_migration/</guid><description>&lt;br>
+&lt;h2 id="the-legacy-hdfs">The Legacy HDFS&lt;/h2>
+&lt;p>A high-throughput backend service (1000+ pods serving live traffic) loaded data from on-prem HDFS. The service reads data into memory at startup and refreshes periodically in the background, while upstream Spark jobs and upload services produce and write the data.&lt;/p>
+&lt;br>
+&lt;h2 id="requirements">Requirements&lt;/h2>
+&lt;p>The task was to migrate the storage layer from HDFS to &lt;em>S3-compatible object storage&lt;/em>. Constraints:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>Zero downtime&lt;/strong>
+&lt;ul>
+&lt;li>Continuous availability with zero maintenance windows.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>Decoupled lifecycles&lt;/strong>
+&lt;ul>
+&lt;li>Independent objects produced by separate upstream pipelines. A single synchronized cutover was not possible.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>Zero blast radius&lt;/strong>
+&lt;ul>
+&lt;li>Live pricing decisions depend on these data. We have to minimize impact as much as possible.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="migration-architecture">Migration Architecture&lt;/h2>
+&lt;p>Because HDFS reads are off the request path, we used the Strangler pattern with shadow dual-reads without risking service latency. The idea is to implement S3 read behind the existing read interface and used dynamic feature flags to route traffic and perform asynchronous parity diffing per data path.&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/047/01_migration_architecture.svg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>Dynamic per-path feature flag simplified pseudocode:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-java" data-lang="java">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">enum&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">ReadMode&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">HDFS_ONLY&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c1">// Read only from HDFS (instant rollback)&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">SHADOW_HDFS&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c1">// Read both, compare byte hash, serve HDFS&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">SHADOW_S3&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c1">// Read both, compare byte hash, serve S3&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">S3_ONLY&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c1">// Read only from S3 (post-cutover)&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-java" data-lang="java">&lt;span class="line">&lt;span class="cl">&lt;span class="kd">public&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kd">class&lt;/span> &lt;span class="nc">StorageReader&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="c1">// ... dependencies: hdfs, s3, config&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">public&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kt">byte&lt;/span>&lt;span class="o">[]&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="nf">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">String&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">return&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="k">switch&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">config&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getMode&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">case&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">HDFS_ONLY&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">hdfs&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">case&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">SHADOW_HDFS&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kt">byte&lt;/span>&lt;span class="o">[]&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">data&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">hdfs&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c1">// serve HDFS&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kt">byte&lt;/span>&lt;span class="o">[]&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">shadow&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">s3&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">compareAndEmitMetrics&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">data&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">shadow&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">yield&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">data&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">case&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">SHADOW_S3&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kt">byte&lt;/span>&lt;span class="o">[]&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">data&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">s3&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c1">// serve S3&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kt">byte&lt;/span>&lt;span class="o">[]&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">shadow&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">hdfs&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">compareAndEmitMetrics&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">data&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">shadow&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="kd">yield&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">data&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="k">case&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">S3_ONLY&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">s3&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">path&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">};&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>This guarantees:&lt;/p>
+&lt;ul>
+&lt;li>&lt;mark>Instant rollback&lt;/mark>: Switch back to HDFS in seconds via dynamic config—no redeployment.&lt;/li>
+&lt;li>&lt;mark>Granular rollout&lt;/mark>: Migrateper data path.&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="migration-phases">Migration Phases&lt;/h2>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/047/02_migration_phases.svg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;h3 id="1-plan-the-migration">1) Plan the Migration&lt;/h3>
+&lt;ol>
+&lt;li>Inventory all data to migrate&lt;/li>
+&lt;li>Retire obsolete data&lt;/li>
+&lt;li>Define the migration unit
+&lt;ul>
+&lt;li>Scope migration per data &lt;em>path&lt;/em> rather than per service&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;h3 id="2-build-the-new-implementation">2) Build the New Implementation&lt;/h3>
+&lt;ol>
+&lt;li>&lt;mark>Consolidate reads behind a single interface&lt;/mark>&lt;/li>
+&lt;li>Implement the S3-compatible client&lt;/li>
+&lt;li>Add &lt;mark>per-path dynamic feature flags&lt;/mark>
+&lt;ul>
+&lt;li>Toggle per path at runtime without deployments.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>Add &lt;mark>shadow-read comparison&lt;/mark>
+&lt;ul>
+&lt;li>Read from both S3 and HDFS in parallel and emit a metric comparing byte hashes.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;h3 id="3-upstream-dual-write">3) Upstream Dual-Write&lt;/h3>
+&lt;ol>
+&lt;li>Enable dual-writing across producers
+&lt;ul>
+&lt;li>Update Spark pipelines and upload services to write to S3 object storage alongside HDFS.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;h3 id="4-pilot-migration">4) Pilot Migration&lt;/h3>
+&lt;p>We migrated a small, representative sample of data across different sizes and read frequencies to test the workflow and uncover issues before full rollout.&lt;/p>
+&lt;ol>
+&lt;li>Enable the feature flags
+&lt;ul>
+&lt;li>The service reads from both HDFS and S3, compares byte hashes, and emits diff metrics while still serving verified data.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>Monitor parity and the new S3 storage metrics
+&lt;ul>
+&lt;li>&lt;mark>Correctness&lt;/mark>
+&lt;ul>
+&lt;li>Byte hash match rate&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;mark>Reliability&lt;/mark>
+&lt;ul>
+&lt;li>HTTP 4xx/5xx error rates&lt;/li>
+&lt;li>Connection timeouts and socket drops&lt;/li>
+&lt;li>Client retry counts&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;mark>Performance&lt;/mark>
+&lt;ul>
+&lt;li>Latency&lt;/li>
+&lt;li>Throughput&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;p>The pilot revealed two operational issues:&lt;/p>
+&lt;ul>
+&lt;li>Large object download timeouts: Downloading large objects caused intermittent drops. We fixed this in &lt;a href="#large-object-download">Large Object Download&lt;/a>.&lt;/li>
+&lt;li>S3 cluster instability during pod boot: The new S3 cluster had transient outages, causing pods to enter &lt;code>CrashLoopBackOff&lt;/code> because loading data is required for startup readiness. We fixed this in &lt;a href="#failsafe-k8s-pod-startup">Failsafe K8s Pod Startup&lt;/a>.&lt;/li>
+&lt;/ul>
+&lt;h3 id="5-migration">5) Migration&lt;/h3>
+&lt;p>With the pilot fixes deployed, we migrated all remaining data in batches.&lt;/p>
+&lt;ol>
+&lt;li>Roll out remaining paths under shadow validation&lt;/li>
+&lt;/ol>
+&lt;h3 id="6-cutover">6) Cutover&lt;/h3>
+&lt;ol>
+&lt;li>Disable HDFS writes, switch producers to S3-only writes&lt;/li>
+&lt;li>Turn off HDFS shadow reads&lt;/li>
+&lt;li>Monitor post-cutover metrics
+&lt;ul>
+&lt;li>Zero read/write traffic on HDFS&lt;/li>
+&lt;li>S3 storage metrics&lt;/li>
+&lt;li>Application metrics&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ol>
+&lt;h3 id="7-shutdown">7) Shutdown&lt;/h3>
+&lt;ol>
+&lt;li>Delete legacy HDFS code &amp;amp; configurations&lt;/li>
+&lt;/ol>
+&lt;br>
+&lt;h2 id="large-object-download">Large Object Download&lt;/h2>
+&lt;p>During the pilot migration, small objects transferred reliably, but large objects intermittently timed out during pod startup.&lt;/p>
+&lt;p>Rather than building custom chunked range request logic, we switched to AWS SDK&amp;rsquo;s native &lt;a href="https://aws.amazon.com/blogs/developer/introducing-crt-based-s3-client-and-the-s3-transfer-manager-in-the-aws-sdk-for-java-2-x/" target="_blank" rel="noopener">CRT-based S3 client&lt;/a> via &lt;code>S3AsyncClient.crtBuilder()&lt;/code>.&lt;/p>
+&lt;br>
+&lt;h2 id="failsafe-k8s-pod-startup">Failsafe K8s Pod Startup&lt;/h2>
+&lt;p>During pilot migration, for some reason S3 storage was unstable which caused pod startup to enter &lt;code>CrashLoopBackOff&lt;/code>. To eliminate this single point of failure, we moved the initial data dependency from startup time to build time: a CI step bakes a data snapshot into the Docker image, allowing pods to startup instantly from local disk before polling S3 for asynchronous updates.&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/047/03_failsafe.svg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>&lt;a href="https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/strangler-fig.html" target="_blank" rel="noopener">https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/strangler-fig.html&lt;/a>&lt;/li>
+&lt;/ul></description></item></channel></rss>

@@ -1,0 +1,316 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Robotics | Wit's Blog</title><link>https://witsblog.github.io/tag/robotics/</link><atom:link href="https://witsblog.github.io/tag/robotics/index.xml" rel="self" type="application/rss+xml"/><description>Robotics</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-us</language><lastBuildDate>Thu, 07 Oct 2021 00:00:00 +0700</lastBuildDate><image><url>https://witsblog.github.io/media/icon_hu66cf44b0d2eab4dae9de00f68d847da7_1567_512x512_fill_lanczos_center_3.png</url><title>Robotics</title><link>https://witsblog.github.io/tag/robotics/</link></image><item><title>AI &amp; Robotics Hackathon 2021</title><link>https://witsblog.github.io/post/011_arv_hackathon_2021/</link><pubDate>Thu, 07 Oct 2021 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/011_arv_hackathon_2021/</guid><description>&lt;p>&lt;a href="https://www.linkedin.com/posts/ai-and-robotics-ventures_arv-hackathon2021-subseamachinelearningtrack-activity-6874958167609106432-aQU9?utm_source=share&amp;amp;utm_medium=member_desktop" target="_blank" rel="noopener">ARV Hackathon 2021&lt;/a> is back with the new and even more challenging problem statements that dare you to find innovative solutions in Cyber Security and Subsea Machine Learning spaces.&lt;/p>
+&lt;p>All tech talents, start-ups, and the next generation innovators are invited to join ARV in creating the innovative technological solutions that will transform the future of Thailand and Southeast Asia.&lt;/p>
+&lt;p>Stay Tuned!&lt;/p></description></item><item><title>Data Science &amp; Machine Learning In Oil And Gas Industry</title><link>https://witsblog.github.io/post/005_data_sci_pttep_arv/</link><pubDate>Mon, 25 Jan 2021 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/005_data_sci_pttep_arv/</guid><description>&lt;h2 id="introduction">Introduction&lt;/h2>
+&lt;p>The Oil and Gas industry is one of the most lucrative industries that has a very high operating cost. Cutting costs is therefore a major priority when it comes to this business. In this post, I share some of the mahcine learning (or data science, if you will) applications that I have worked on.&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/005/post_05-01.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/005/post_05-02.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/005/post_05-03.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/005/post_05-04.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;div id="chart-152786349" class="chart">&lt;/div>
+&lt;script>
+(function() {
+let a = setInterval( function() {
+if ( typeof window.Plotly === 'undefined' ) {
+return;
+}
+clearInterval( a );
+Plotly.d3.json("./pipe.json", function(chart) {
+Plotly.plot('chart-152786349', chart.data, chart.layout, {responsive: true});
+});
+}, 500 );
+})();
+&lt;/script>
+&lt;br>
+&lt;div id="chart-839526714" class="chart">&lt;/div>
+&lt;script>
+(function() {
+let a = setInterval( function() {
+if ( typeof window.Plotly === 'undefined' ) {
+return;
+}
+clearInterval( a );
+Plotly.d3.json("./series.json", function(chart) {
+Plotly.plot('chart-839526714', chart.data, chart.layout, {responsive: true});
+});
+}, 500 );
+})();
+&lt;/script>
+&lt;br>
+&lt;div id="chart-467591382" class="chart">&lt;/div>
+&lt;script>
+(function() {
+let a = setInterval( function() {
+if ( typeof window.Plotly === 'undefined' ) {
+return;
+}
+clearInterval( a );
+Plotly.d3.json("./data.json", function(chart) {
+Plotly.plot('chart-467591382', chart.data, chart.layout, {responsive: true});
+});
+}, 500 );
+})();
+&lt;/script>
+&lt;br>
+&lt;div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+&lt;iframe src="https://www.youtube.com/embed/LCgLtspSjBk" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" allowfullscreen title="YouTube Video">&lt;/iframe>
+&lt;/div></description></item><item><title>Custom Sonar Simulation in Gazebo</title><link>https://witsblog.github.io/post/004_sonar_sim/</link><pubDate>Mon, 04 Jan 2021 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/004_sonar_sim/</guid><description/></item><item><title>The Quest to Build an Autonomous Underwater Vehicle</title><link>https://witsblog.github.io/post/003_the_quest_to_build_auv/</link><pubDate>Mon, 04 Jan 2021 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/003_the_quest_to_build_auv/</guid><description>&lt;blockquote>
+&lt;p>&amp;ldquo;We stand on the brink of a technological revolution. Soon, few of us will own our own automobiles and instead will get around in driverless electric vehicles that we summon with the touch of an app. We will be liberated from driving, prevent over 90% of car crashes, provide freedom of mobility to the elderly and disabled, and decrease our dependence on fossil fuels.&amp;rdquo; — The Quest to Build the Driverless Car&lt;/p>
+&lt;/blockquote>
+&lt;p>The same applies to oil and gas industry. Although robotic technologies have entered the oil and gas industry for around some time, the quest to build the autonomous underwater vehicle must go on!&lt;/p>
+&lt;p>In this post, I will briefly write about the kind of the things we do at our R&amp;amp;D team. (Please note that I cannot write all the details and so I have skipped some parts.)&lt;/p>
+&lt;h2 id="a-system">A System&lt;/h2>
+&lt;p>What do we need in order to build an autonomous underwater vehicle and its system?&lt;/p>
+&lt;ul>
+&lt;li>Hardware&lt;/li>
+&lt;li>Software
+&lt;ul>
+&lt;li>&lt;a href="#navigation-software">Navigation software&lt;/a>&lt;/li>
+&lt;li>&lt;a href="#perception-algorithms">Perception algorithms&lt;/a>&lt;/li>
+&lt;li>&lt;a href="">Planning algorithms&lt;/a>&lt;/li>
+&lt;li>&lt;a href="#control-algorithms">Control algorithms&lt;/a>&lt;/li>
+&lt;li>&lt;a href="#simulation-platform">Simulation platform&lt;/a>&lt;/li>
+&lt;li>&lt;a href="#data-analytics-software">Data analytics software&lt;/a>&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ul>
+&lt;p>All the teams (software, electrical, and mechanical) collaboratively design the robot. The physical aspect of the robot is mainly designed by a mechanical engineer team where they need to consider things such as the dynamic model, hydrodynamic model, robot mechanisms, and etc. The electrical engineer team is the ones who design and lay out electrical circuits connecting all components to a system. The software team mostly look at the high level aspect of the robot such as what sensors, what algorithms, how to communicate with the vessel, how many computing units, how to store logging data, and the list goes on.&lt;/p>
+&lt;h2 id="hardware">Hardware&lt;/h2>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/003/01.jpeg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/media/albums/work/020.jpeg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;h2 id="navigation-software">Navigation Software&lt;/h2>
+&lt;ul>
+&lt;li>IMU dead reckoning&lt;/li>
+&lt;li>SLAM&lt;/li>
+&lt;li>Map building&lt;/li>
+&lt;/ul>
+&lt;h2 id="perception-algorithms">Perception Algorithms&lt;/h2>
+&lt;p>Perception algorithms are probably the key to intelligent autonomous vehicles. At ARV, we have developed several algorithms, including but not limited to 2D object detection, 3D object detection, point cloud-related algorithms, etc., in order to tackle the challenges we encountered in subsea robotics.&lt;/p>
+&lt;p>We have also developed several machine learning and &lt;a href="https://sirawit-github.github.io/post/05_data_sci_pttep_arv/" target="_blank" rel="noopener">deep learning models for automatic pipeline inspection&lt;/a> as well. These are used both in online (real-time) and offline (&lt;a href="#data-analytics-software">data analytics software&lt;/a>).&lt;/p>
+&lt;h2 id="planning-algorithms">Planning Algorithms&lt;/h2>
+&lt;ul>
+&lt;li>Way point planning&lt;/li>
+&lt;li>Optimal path planning&lt;/li>
+&lt;/ul>
+&lt;h2 id="control-algorithms">Control Algorithms&lt;/h2>
+&lt;h2 id="simulation-platform">Simulation Platform&lt;/h2>
+&lt;p>This is probably the testbed of our robotics software development. We use &lt;a href="http://gazebosim.org/" target="_blank" rel="noopener">Gazebo&lt;/a> as a simulator for realistic simulation, with some custom-implemented sensor plugins that we developed for our own use.&lt;/p>
+&lt;!-- ![](/image/post/04/simulation_old.png) -->
+&lt;p>Of course, these custom plugins should run very fast for the simulation to run smoothly, so the algorihtms must be hevily optimized. For example, the custom sonar plugin was implemented in CUDA to speed things up.&lt;/p>
+&lt;!-- ![](/image/post/06/cuda.png) -->
+&lt;h2 id="data-analytics-software">Data Analytics Software&lt;/h2>
+&lt;p>The collected data when the robot operates at the seabed must be analyzed in some way. We build our web application where customers can log in to see the analyzed data (as well as raw data) and the generated report.&lt;/p>
+&lt;div id="chart-196753824" class="chart">&lt;/div>
+&lt;script>
+(function() {
+let a = setInterval( function() {
+if ( typeof window.Plotly === 'undefined' ) {
+return;
+}
+clearInterval( a );
+Plotly.d3.json("./data.json", function(chart) {
+Plotly.plot('chart-196753824', chart.data, chart.layout, {responsive: true});
+});
+}, 500 );
+})();
+&lt;/script></description></item><item><title>Visual Odometry Implementation from Scratch</title><link>https://witsblog.github.io/post/001_visual_odometry/</link><pubDate>Sat, 05 Oct 2019 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/001_visual_odometry/</guid><description>&lt;h2 id="introduction">Introduction&lt;/h2>
+&lt;p>This is the first-ever post of my blog; so I will give it a try. This post is about things that I went through when I tried to implement a simple monocular visual odometry from scratch. For a programming language, I choose MATLAB because it is easy-to-use and fast for prototyping a project.&lt;/p>
+&lt;p>&lt;em>&lt;strong>Disclaimer:&lt;/strong>&lt;/em> This is not a state-of-the-art implementation. This simply serves the purpose of learning.&lt;/p>
+&lt;h2 id="the-problem">The Problem&lt;/h2>
+&lt;p>To give a general idea, visual odometry (VO) is an algorithm that aims to recover the path incrementally, by using the visual input from cameras, and hence the name. It can be considered as a sequential structure from motion, as opposed to hierarchical structure from motion. Imagine a robot or an agent, attached with a calibrated camera $C$, moves through an environment and receives the image continuously. The images
+$I_k, I_{k-1}$ are taken at different time steps
+$k$ and
+$k-1$, which corresponds to the camera pose
+$C_k$ and $C_{k-1}$ respectively. The task of VO is basically to retrieve the transformation matrix
+$$T = \left[R \lvert t \right]$$ that relates two camera poses, and concatenate all the transformaitons
+$T_k$ to get the current camera pose:&lt;/p>
+$$ C_{t} = T_{t,t-1}C_{t-1}$$
+&lt;h2 id="getting-things-up--running">Getting Things Up &amp;amp; Running&lt;/h2>
+&lt;p>I first have an initialization function &lt;code>vo_initialize.m&lt;/code> that takes two image frames, establishing keypoint correspondences between these two frames using KLT feature tracker, estimating relative camera pose, and finally triangulating an initial 3D point cloud landmarks. I admit that these may sound lacking of excitement (as they are something that is well understood in the computer vision community), but they are not easy to implement from scratch in a single sit.&lt;/p>
+&lt;h3 id="feature-detection">Feature Detection&lt;/h3>
+&lt;p>This is a simple plementation of Harris corner detector. For each pixel
+$(u,v)$, we calculate a score&lt;/p>
+$$R = det(A_{u,v}) - {\lambda}trace^2(A_{u,v})$$
+&lt;p>where&lt;/p>
+$$ A_{u,v} = \begin{bmatrix} \sum{I^2_{x}} &amp; \sum{I_{x}I_{y}}\\ \sum{I_{x}I_{y}} &amp; \sum{I^2_{y}} \end{bmatrix} $$
+&lt;p>and
+$I_x, I_y$ are the image gradients in
+$x$ and
+$y$ direction respectively.&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-matlab" data-lang="matlab">&lt;span class="line">&lt;span class="cl">&lt;span class="n">I_x&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">conv2&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">img&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span> &lt;span class="mi">0&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="o">-&lt;/span>&lt;span class="mi">2&lt;/span> &lt;span class="mi">0&lt;/span> &lt;span class="mi">2&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span> &lt;span class="mi">0&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">],&lt;/span> &lt;span class="s">&amp;#39;valid&amp;#39;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">I_y&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">conv2&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">img&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span> &lt;span class="o">-&lt;/span>&lt;span class="mi">2&lt;/span> &lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="mi">0&lt;/span> &lt;span class="mi">0&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="mi">1&lt;/span> &lt;span class="mi">2&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">],&lt;/span> &lt;span class="s">&amp;#39;valid&amp;#39;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">I_xx&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">double&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">I_x&lt;/span>&lt;span class="o">.^&lt;/span>&lt;span class="mi">2&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">I_yy&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">double&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">I_y&lt;/span>&lt;span class="o">.^&lt;/span>&lt;span class="mi">2&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">I_xy&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">double&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">I_x&lt;/span>&lt;span class="o">.*&lt;/span>&lt;span class="n">I_y&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">I_xx_sum&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">conv2&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">I_xx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nb">ones&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">patch_size&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="s">&amp;#39;valid&amp;#39;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">I_yy_sum&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">conv2&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">I_yy&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nb">ones&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">patch_size&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="s">&amp;#39;valid&amp;#39;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">I_xy_sum&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">conv2&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">I_xy&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nb">ones&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">patch_size&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="s">&amp;#39;valid&amp;#39;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">pad_size&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="nb">floor&lt;/span>&lt;span class="p">((&lt;/span>&lt;span class="n">patch_size&lt;/span>&lt;span class="o">+&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">/&lt;/span>&lt;span class="mi">2&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">scores&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">I_xx_sum&lt;/span>&lt;span class="o">.*&lt;/span>&lt;span class="n">I_yy_sum&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="n">I_xy_sum&lt;/span>&lt;span class="o">.^&lt;/span>&lt;span class="mi">2&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="n">lambda&lt;/span>&lt;span class="o">*&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">I_xx_sum&lt;/span> &lt;span class="o">+&lt;/span> &lt;span class="n">I_yy_sum&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.^&lt;/span>&lt;span class="mi">2&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">scores&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">scores&lt;/span> &lt;span class="o">&amp;lt;&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">scores&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">padarray&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">scores&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="n">pad_size&lt;/span> &lt;span class="n">pad_size&lt;/span>&lt;span class="p">]);&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>After calculating the score, we simply select
+$k$ keypoints with highest scores (with non-maximum suppression).&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-matlab" data-lang="matlab">&lt;span class="line">&lt;span class="cl">&lt;span class="n">scores_pad&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">padarray&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">scores&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="n">r&lt;/span> &lt;span class="n">r&lt;/span>&lt;span class="p">]);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">score_size&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="nb">size&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">scores_pad&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">keypoints&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="nb">zeros&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">2&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">k&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">for&lt;/span> &lt;span class="nb">i&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="n">k&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">[&lt;/span>&lt;span class="o">~&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">idx&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="n">max&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">scores_pad&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="p">[],&lt;/span> &lt;span class="s">&amp;#39;all&amp;#39;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#39;linear&amp;#39;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">[&lt;/span>&lt;span class="n">row&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">col&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="nb">ind2sub&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">score_size&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">idx&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">keypoints&lt;/span>&lt;span class="p">(:,&lt;/span> &lt;span class="nb">i&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="n">row&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="n">col&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="n">r&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">scores_pad&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">row&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="n">r&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="n">row&lt;/span>&lt;span class="o">+&lt;/span>&lt;span class="n">r&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">col&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="n">r&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="n">col&lt;/span>&lt;span class="o">+&lt;/span>&lt;span class="n">r&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">end&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="klt-feature-tracker">KLT Feature Tracker&lt;/h3>
+&lt;p>&amp;hellip;&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-matlab" data-lang="matlab">&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="pose-estimation">Pose Estimation&lt;/h3>
+&lt;p>&amp;hellip;&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-matlab" data-lang="matlab">&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="triangulation">Triangulation&lt;/h3>
+&lt;p>&amp;hellip;&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-matlab" data-lang="matlab">&lt;/code>&lt;/pre>&lt;/div>&lt;p>The result of &lt;code>vo_initialize.m&lt;/code> seems reasonable. Good to go!&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/001/post.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;h2 id="problems-from-previous-implementation">Problems from Previous Implementation&lt;/h2>
+&lt;p>&amp;hellip;&lt;/p>
+&lt;h2 id="estimate-world-camera-pose">Estimate World Camera Pose&lt;/h2>
+&lt;p>&amp;hellip;&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-matlab" data-lang="matlab">&lt;/code>&lt;/pre>&lt;/div>&lt;h2 id="bundle-adjustment">Bundle Adjustment&lt;/h2>
+&lt;p>Bundle adjustment is a very cool concept. To put it simply, it is an optimization algorithm used to refine the estimated trajectory.&lt;/p>
+&lt;p>In this implementation, a &lt;em>motion-only&lt;/em> bundle adjustment is implemented, which optimizes only the camera orientation $R$ and position $t$. This implies that&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-matlab" data-lang="matlab">&lt;/code>&lt;/pre>&lt;/div>&lt;h2 id="results">Results&lt;/h2>
+&lt;p>Putting it all together, the &lt;code>vo_initialize.m&lt;/code> function initializes the VO pipeline, creating initial 3D point landmarks, extracting initial keypoints, and estimating the initial pose of the camera. The &lt;code>vo_process.m&lt;/code> sequentially extracting and tracking image features from an image frame, across frames, and simultaneously estimating the pose of the camera. Bundle adjustment is also implemented to refine the estimated pose at each step. Lastly, new 3D points are regularly created as the number of currently tracked keypoints is shrinking over time. The following is the final result.&lt;/p>
+&lt;div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+&lt;iframe src="https://www.youtube.com/embed/A5HnnSiZ_LM" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" allowfullscreen title="YouTube Video">&lt;/iframe>
+&lt;/div>
+&lt;br>
+&lt;p>From the video, it is obvious that this is not a state-of-the-art implementation. There are various components that are not implemented. As we can see, the estimated trajectory starts to deviate from the ground truth after some time, due to the scale drift&amp;ndash;a common problem in monocular VO. The estimated trajetory also wiggles slightly, probaly due to the fact that the full bundle adjustment is not implemented. And the most importantly, I did not try to implement a loop closure.&lt;/p>
+&lt;h2 id="reflections">Reflections&lt;/h2>
+&lt;p>The task of implementing VO from scratch may sound lacking of excitement. I believe that the conventional pipeline of VO and SLAM is something that is already well-understood in the computer vision community. What I realize is that academic papers usually have missing steps that are left for the readers to figure out. Here, I tried to connect those steps and the result stands as a self-assesment of my understanding.&lt;/p></description></item><item><title>Autonomous Ball-Collecting Robot using Reinforcement Learning</title><link>https://witsblog.github.io/project/00_robot/</link><pubDate>Wed, 01 Aug 2018 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/project/00_robot/</guid><description>&lt;p>This is a project where we used reinforcement learning to train the robot to collect balls in a simple environment. The robot is a 4-Mecanum wheeled robot equipped with a camera and a 2D LiDAR sensor. The algorithms were implemented on &lt;a href="https://www.intel.com/content/www/us/en/products/details/nuc.html" target="_blank" rel="noopener">Intel NUC&lt;/a> and &lt;a href="https://developer.nvidia.com/embedded/jetson-tx2" target="_blank" rel="noopener">Nvidia Jetson TX2&lt;/a> board.&lt;/p>
+&lt;p>This is my attempt at re-writing a write-up because a lot of recruiters ask me how the project was done and I sometimes forget (it was done in 2018).&lt;/p>
+&lt;br>
+&lt;h2 id="optimal-policy-and-optimal-value-functions">Optimal Policy and Optimal Value Functions&lt;/h2>
+&lt;p>&lt;strong>Bellman optimality equation&lt;/strong>&lt;/p>
+&lt;p>For optimal value function
+$v_{*}$:&lt;/p>
+$$
+\begin{aligned}
+v_{*}(s) &amp;= \max_{a} E \left[ R_{t+1} + \gamma v_{*}(S_{t+1}) \vert S_{t}=s, A_{t}=a \right] \\
+&amp;= \max_{a} \sum_{s',r} p(s',r \vert s,a) \left[ r + \gamma v_{*}(s') \right]
+\end{aligned}
+$$
+&lt;p>For optimal action-value function
+$q_{*}$:&lt;/p>
+$$
+\begin{aligned}
+q_{*}(s,a) &amp;= E \left[ R_{t+1} + \gamma \max_{a'} q_{*}(S_{t+1}, a') \vert S_{t} = s, A_{t} = a \right] \\
+&amp;= \sum_{s',r} p(s',r \vert s,a) \left[ r + \gamma \max_{a'} q_{*}(s',a') \right]
+\end{aligned}
+$$
+&lt;h2 id="monte-carlo-methods">Monte Carlo Methods&lt;/h2>
+&lt;p>Monte Carlo methods only require a sample of states, actions, and rewards from interaction between the agent and the environment. It is model-free; the probability distributions such as state-transition
+$p(s' \vert s,a)$ need not to be known.&lt;/p>
+&lt;h2 id="q-learning">Q-Learning&lt;/h2>
+$$ Q(s,a) \leftarrow (1-\alpha)Q(s,a) + \alpha \left[ r + \gamma \max_{a'} Q(s',a') \right] $$
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-fallback" data-lang="fallback">&lt;span class="line">&lt;span class="cl">Initialize Q(s, a)
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">Start with state &amp;#34;s&amp;#34;
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">Loop:
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> Select action &amp;#34;a&amp;#34; with e-greedy
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> Execute action &amp;#34;a&amp;#34;, receive immediate reward &amp;#34;r&amp;#34; and go to state &amp;#34;s&amp;#39;&amp;#34;
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> Q(s, a) = Q(s, a) + alpha*[r + gamma * max{Q(s&amp;#39;, a&amp;#39;)} - Q(s, a)]
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>But what if the number of
+$(s,a)$ pairs are very big? Then it is not practical to keep the table
+$Q$ for every pair of
+$(s,a)$. Instead, we could maintain
+$Q(s,a)$ as a parameterized function. This is where the neural network comes into play.&lt;/p>
+&lt;h2 id="q-network">Q-Network&lt;/h2>
+&lt;p>&lt;strong>Training&lt;/strong>&lt;/p>
+&lt;p>We define the &lt;strong>loss&lt;/strong> as:&lt;/p>
+$$
+L(\theta) = \left( \left( r + \gamma \max_{a'} {Q(s', a' | \theta }) \right) - Q(s,a|\theta) \right)^2
+$$
+&lt;p>Our objective is to find weight $\theta$ of the network to minimize the loss:&lt;/p>
+$$
+\min_{\theta} L(\theta) = \min_{\theta} \left[ \left( r + \gamma \max_{a'} {Q(s', a' | \theta }) - Q(s,a|\theta) \right)^2 \right]
+$$
+&lt;p>where
+$r$ is the immediate reward that we observe and the term
+$r + \gamma \max_{a'} {Q(s', a' | \theta })$ is the approximated target.&lt;/p>
+&lt;p>&lt;strong>Convergence&lt;/strong>&lt;/p>
+&lt;p>However, using a neural network to represent the action-value function tends to be unstable due to:&lt;/p>
+&lt;ul>
+&lt;li>Correlations between samples&lt;/li>
+&lt;li>Non-stationary targets&lt;/li>
+&lt;/ul>
+&lt;p>How does DeepMind solve this issue?&lt;/p>
+&lt;ul>
+&lt;li>Experience replay&lt;/li>
+&lt;li>Separated networks&lt;/li>
+&lt;li>Go deeper (added by myself)&lt;/li>
+&lt;/ul>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/project/00/go_deeper.jpg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;h2 id="experience-replay">Experience Replay&lt;/h2>
+&lt;h2 id="separated-networks">Separated Networks&lt;/h2>
+$$
+L(\theta) = \left( \left( r + \gamma \max_{a'} {Q(s', a' | \theta^{-} }) \right) - Q(s,a|\theta) \right)^2
+$$
+&lt;br>
+&lt;h2 id="gallery">Gallery&lt;/h2>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/project/00/1.jpeg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/project/00/2.jpeg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/project/00/3.jpeg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/project/00/4.jpeg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>Mnih, V. et al. &lt;a href="https://deepmind.com/research/publications/2019/human-level-control-through-deep-reinforcement-learning" target="_blank" rel="noopener">Human-level control through deep reinforcement learning.&lt;/a> Nature 518, 529–533 (2015).&lt;/li>
+&lt;/ul></description></item></channel></rss>

@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 540" width="940" height="540"
+     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#475569"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#16a34a"/>
+    </marker>
+    <filter id="shadow" x="-3%" y="-3%" width="106%" height="106%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.05"/>
+    </filter>
+  </defs>
+
+  <!-- Background Canvas -->
+  <rect width="940" height="540" fill="#f8fafc" rx="8"/>
+
+  <!-- Swimlane Headers -->
+  <rect x="20" y="20" width="220" height="38" rx="6" fill="#e2e8f0"/>
+  <text x="130" y="44" font-size="13" font-weight="700" fill="#334155" text-anchor="middle">Client / Request</text>
+
+  <rect x="250" y="20" width="370" height="38" rx="6" fill="#dbeafe"/>
+  <text x="435" y="44" font-size="13" font-weight="700" fill="#1e40af" text-anchor="middle">Backend Pricing Service</text>
+
+  <rect x="630" y="20" width="290" height="38" rx="6" fill="#dcfce7"/>
+  <text x="775" y="44" font-size="13" font-weight="700" fill="#166534" text-anchor="middle">Experimentation Library</text>
+
+  <!-- Swimlane Dividers -->
+  <line x1="245" y1="20" x2="245" y2="515" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <line x1="625" y1="20" x2="625" y2="515" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="4 4"/>
+
+  <!-- 1. Client Start -->
+  <circle cx="130" cy="85" r="14" fill="#64748b"/>
+  <text x="130" y="89" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">Start</text>
+
+  <line x1="130" y1="99" x2="130" y2="122" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Request Box -->
+  <rect x="50" y="124" width="160" height="36" rx="6" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" filter="url(#shadow)"/>
+  <text x="130" y="147" font-size="13" font-weight="600" fill="#1e293b" text-anchor="middle">Request</text>
+
+  <!-- Flow to Backend -->
+  <path d="M 210 142 L 305 142" fill="none" stroke="#2563eb" stroke-width="1.8" marker-end="url(#arrowBlue)"/>
+
+  <!-- 2. Backend Service Flow -->
+  <rect x="307" y="124" width="256" height="36" rx="6" fill="#ffffff" stroke="#3b82f6" stroke-width="1.2" filter="url(#shadow)"/>
+  <text x="435" y="147" font-size="13" font-weight="600" fill="#1e293b" text-anchor="middle">Enrich Request Context</text>
+
+  <line x1="435" y1="160" x2="435" y2="186" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="307" y="188" width="256" height="36" rx="6" fill="#ffffff" stroke="#3b82f6" stroke-width="1.2" filter="url(#shadow)"/>
+  <text x="435" y="211" font-size="13" font-weight="600" fill="#1e293b" text-anchor="middle">Rule Engine</text>
+
+  <line x1="435" y1="224" x2="435" y2="250" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="307" y="252" width="256" height="36" rx="6" fill="#ffffff" stroke="#3b82f6" stroke-width="1.2" filter="url(#shadow)"/>
+  <text x="435" y="275" font-size="13" font-weight="600" fill="#1e293b" text-anchor="middle">Determine Variant</text>
+
+  <!-- Flow to Library -->
+  <path d="M 563 270 L 650 270" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#arrowGreen)"/>
+
+  <!-- 3. Experimentation Library Flow -->
+  <rect x="652" y="248" width="250" height="44" rx="6" fill="#ffffff" stroke="#16a34a" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="777" y="275" font-size="13" font-weight="700" fill="#14532d" text-anchor="middle">Calculate Variant</text>
+
+  <!-- Telemetry from Library -->
+  <path d="M 777 292 L 777 325" fill="none" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#arrow)"/>
+  <rect x="717" y="327" width="120" height="26" rx="4" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="777" y="344" font-size="11" font-weight="500" fill="#475569" text-anchor="middle">Log (Kafka)</text>
+
+  <!-- Return Flow from Library to Backend -->
+  <path d="M 720 292 L 720 365 L 475 365" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#arrowGreen)"/>
+
+  <!-- Decision Point (A / B) -->
+  <polygon points="435,345 475,365 435,385 395,365" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+  <text x="435" y="369" font-size="11" font-weight="700" fill="#92400e" text-anchor="middle">A / B</text>
+
+  <!-- Branch A -->
+  <line x1="395" y1="365" x2="350" y2="365" stroke="#475569" stroke-width="1.5"/>
+  <line x1="350" y1="365" x2="350" y2="396" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="300" y="398" width="100" height="34" rx="5" fill="#f8fafc" stroke="#64748b" stroke-width="1.2"/>
+  <text x="350" y="420" font-size="12" font-weight="700" fill="#334155" text-anchor="middle">A logic</text>
+
+  <!-- Branch B -->
+  <line x1="475" y1="365" x2="520" y2="365" stroke="#475569" stroke-width="1.5"/>
+  <line x1="520" y1="365" x2="520" y2="396" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="470" y="398" width="100" height="34" rx="5" fill="#eff6ff" stroke="#2563eb" stroke-width="1.2"/>
+  <text x="520" y="420" font-size="12" font-weight="700" fill="#1e40af" text-anchor="middle">B logic</text>
+
+  <!-- Convergence to Return Node -->
+  <line x1="350" y1="432" x2="350" y2="452" stroke="#475569" stroke-width="1.5"/>
+  <line x1="520" y1="432" x2="520" y2="452" stroke="#475569" stroke-width="1.5"/>
+  <line x1="350" y1="452" x2="520" y2="452" stroke="#475569" stroke-width="1.5"/>
+  <line x1="435" y1="452" x2="435" y2="468" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="365" y="470" width="140" height="34" rx="6" fill="#ffffff" stroke="#3b82f6" stroke-width="1.2" filter="url(#shadow)"/>
+  <text x="435" y="492" font-size="13" font-weight="600" fill="#1e293b" text-anchor="middle">Return</text>
+
+  <!-- Telemetry from Return -->
+  <path d="M 505 487 L 715 487" fill="none" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#arrow)"/>
+  <rect x="717" y="474" width="120" height="26" rx="4" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="777" y="491" font-size="11" font-weight="500" fill="#475569" text-anchor="middle">Log (Kafka)</text>
+
+  <!-- Flow back to Client -->
+  <path d="M 365 487 L 130 487 L 130 435" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Response Box -->
+  <rect x="50" y="396" width="160" height="36" rx="6" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" filter="url(#shadow)"/>
+  <text x="130" y="419" font-size="13" font-weight="600" fill="#1e293b" text-anchor="middle">Response</text>
+
+  <line x1="130" y1="396" x2="130" y2="376" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <circle cx="130" cy="360" r="14" fill="#1e293b"/>
+  <text x="130" y="364" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">End</text>
+</svg>

@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 280" width="820" height="280"
+     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrowG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#16a34a"/>
+    </marker>
+  </defs>
+
+  <!-- CI Build Pipeline -->
+  <rect x="40" y="24" width="160" height="50" rx="6" fill="#f1f5f9" stroke="#475569" stroke-width="1.5"/>
+  <text x="120" y="54" font-size="14" fill="#1e293b" text-anchor="middle" font-weight="600">CI Build</text>
+
+  <line x1="200" y1="49" x2="250" y2="49" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowG)"/>
+
+  <rect x="255" y="24" width="220" height="50" rx="6" fill="#f1f5f9" stroke="#475569" stroke-width="1.5"/>
+  <text x="365" y="46" font-size="13" fill="#1e293b" text-anchor="middle" font-weight="500">Fetch Data Snapshot</text>
+  <text x="365" y="62" font-size="11" fill="#64748b" text-anchor="middle">from object storage</text>
+
+  <line x1="475" y1="49" x2="525" y2="49" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowG)"/>
+
+  <rect x="530" y="24" width="230" height="50" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="645" y="46" font-size="13" fill="#1e3a8a" text-anchor="middle" font-weight="600">Bake into Docker Image</text>
+  <text x="645" y="62" font-size="11" fill="#1e40af" text-anchor="middle">build-time dependency</text>
+
+  <line x1="645" y1="74" x2="645" y2="120" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowG)"/>
+
+  <!-- Pod Boot / Runtime -->
+  <rect x="520" y="122" width="250" height="48" rx="6" fill="#e2e8f0" stroke="#475569" stroke-width="1.5"/>
+  <text x="645" y="151" font-size="14" fill="#1e293b" text-anchor="middle" font-weight="600">Pod Boot / Autoscale</text>
+
+  <!-- Flow 1: Cold start from local disk -->
+  <line x1="570" y1="170" x2="280" y2="218" stroke="#16a34a" stroke-width="1.8" marker-end="url(#arrowGreen)"/>
+  <text x="370" y="193" font-size="12" fill="#15803d" font-weight="600">1) Cold Start</text>
+
+  <!-- Flow 2: Asynchronous background refresh -->
+  <line x1="680" y1="170" x2="680" y2="218" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrowG)"/>
+  <text x="690" y="193" font-size="12" fill="#64748b">2) Async Refresh</text>
+
+  <!-- Baked Local Snapshot Box -->
+  <rect x="100" y="220" width="340" height="52" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+  <text x="270" y="244" font-size="14" fill="#14532d" text-anchor="middle" font-weight="600">Baked Local Snapshot</text>
+  <text x="270" y="260" font-size="11" fill="#166534" text-anchor="middle">instant startup from disk — zero network dependency</text>
+
+  <!-- S3 Storage Box -->
+  <rect x="560" y="220" width="240" height="52" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="680" y="244" font-size="14" fill="#1e3a8a" text-anchor="middle" font-weight="600">S3 Object Storage</text>
+  <text x="680" y="260" font-size="11" fill="#1e40af" text-anchor="middle">periodic background refresh</text>
+</svg>
