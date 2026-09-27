@@ -1,0 +1,188 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 450" width="1180" height="450"
+     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <!-- Markers -->
+    <marker id="arrGray" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrRed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#ef4444"/>
+    </marker>
+    <marker id="arrGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#10b981"/>
+    </marker>
+    <marker id="arrBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#2563eb"/>
+    </marker>
+
+    <!-- Filters -->
+    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.06"/>
+    </filter>
+
+    <!-- Gradients -->
+    <linearGradient id="legacyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fee2e2"/>
+      <stop offset="100%" stop-color="#fecaca"/>
+    </linearGradient>
+    <linearGradient id="targetGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="100%" stop-color="#bbf7d0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="1180" height="450" fill="#ffffff" rx="12" stroke="#e2e8f0" stroke-width="1.5"/>
+
+  <!-- ==================================================================== -->
+  <!-- UPPER HALF: CURRENT STATE (LEGACY ARCHITECTURE)                      -->
+  <!-- ==================================================================== -->
+  <g transform="translate(30, 20)" filter="url(#cardShadow)">
+    <rect x="0" y="0" width="1120" height="195" rx="10" fill="#fff9f9" stroke="#fca5a5" stroke-width="1.4" stroke-dasharray="6 4"/>
+
+    <!-- Section Badge -->
+    <rect x="20" y="12" width="130" height="24" rx="5" fill="url(#legacyGrad)" stroke="#f87171" stroke-width="1"/>
+    <text x="85" y="28" font-size="11" font-weight="700" fill="#991b1b" text-anchor="middle" letter-spacing="0.5">LEGACY FLOW</text>
+
+    <!-- Component 1: Data Pipeline -->
+    <g transform="translate(35, 76)">
+      <rect x="0" y="0" width="125" height="48" rx="6" fill="#ffffff" stroke="#f87171" stroke-width="1.4"/>
+      <text x="62.5" y="29" font-size="12" font-weight="700" fill="#991b1b" text-anchor="middle">Data Pipeline</text>
+    </g>
+
+    <!-- Arrow Pipeline -> Token Pool -->
+    <path d="M 160 100 L 210 100" fill="none" stroke="#dc2626" stroke-width="1.8" marker-end="url(#arrRed)"/>
+
+    <!-- Component 2: Token Pool (Legacy) -->
+    <g transform="translate(210, 52)">
+      <path d="M 0 12 C 0 5 28 0 62 0 C 96 0 125 5 125 12 L 125 84 C 125 91 96 96 62 96 C 28 96 0 91 0 84 Z" fill="#fffcdd" stroke="#ca8a04" stroke-width="1.5"/>
+      <path d="M 125 12 C 125 19 96 24 62 24 C 28 24 0 19 0 12" fill="none" stroke="#ca8a04" stroke-width="1.5"/>
+      <text x="62.5" y="58" font-size="12" font-weight="700" fill="#854d0e" text-anchor="middle">Token Pool</text>
+    </g>
+
+    <!-- Arrow Token Pool -> Pricing UI Backend -->
+    <path d="M 335 100 L 385 100" fill="none" stroke="#ca8a04" stroke-width="1.8" marker-end="url(#arrGray)"/>
+
+    <!-- Component 3: Pricing's own Experiment UI & Backend -->
+    <g transform="translate(385, 22)">
+      <!-- UI Box -->
+      <rect x="0" y="0" width="180" height="40" rx="6" fill="#ffffff" stroke="#f87171" stroke-width="1.3"/>
+      <text x="90" y="16" font-size="12" font-weight="700" fill="#991b1b" text-anchor="middle">Pricing's own</text>
+      <text x="90" y="32" font-size="12" font-weight="700" fill="#991b1b" text-anchor="middle">Experiment UI</text>
+
+      <!-- Connecting Arrow -->
+      <line x1="90" y1="40" x2="90" y2="54" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrGray)"/>
+
+      <!-- Backend Box -->
+      <rect x="0" y="54" width="180" height="48" rx="6" fill="#ffffff" stroke="#ef4444" stroke-width="1.5"/>
+      <text x="90" y="74" font-size="12" font-weight="700" fill="#991b1b" text-anchor="middle">Pricing UI</text>
+      <text x="90" y="90" font-size="12" font-weight="700" fill="#991b1b" text-anchor="middle">Backend</text>
+    </g>
+
+    <!-- Arrow Backend -> Pricing DB -->
+    <path d="M 565 100 L 610 100" fill="none" stroke="#dc2626" stroke-width="1.8" marker-end="url(#arrRed)"/>
+
+    <!-- Component 4: Pricing DB -->
+    <g transform="translate(610, 52)">
+      <path d="M 0 12 C 0 5 33 0 75 0 C 117 0 150 5 150 12 L 150 84 C 150 91 117 96 75 96 C 33 96 0 91 0 84 Z" fill="#ddedff" stroke="#2563eb" stroke-width="1.5"/>
+      <path d="M 150 12 C 150 19 117 24 75 24 C 33 24 0 19 0 12" fill="none" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="75" y="58" font-size="12" font-weight="700" fill="#1e40af" text-anchor="middle">Pricing DB</text>
+    </g>
+
+    <!-- Arrow Database -> Pricing Service -->
+    <path d="M 760 100 L 805 100" fill="none" stroke="#2563eb" stroke-width="1.8" marker-end="url(#arrBlue)"/>
+
+    <!-- Component 5: Pricing backend service (Legacy) -->
+    <g transform="translate(805, 43)">
+      <rect x="0" y="0" width="170" height="114" rx="8" fill="#ffffff" stroke="#ef4444" stroke-width="1.6"/>
+      <rect x="0" y="0" width="170" height="42" rx="8" fill="#fee2e2"/>
+      <rect x="0" y="26" width="170" height="16" fill="#fee2e2"/>
+      <text x="85" y="17" font-size="12" font-weight="700" fill="#991b1b" text-anchor="middle">Pricing</text>
+      <text x="85" y="33" font-size="12" font-weight="700" fill="#991b1b" text-anchor="middle">backend service</text>
+
+      <rect x="12" y="49" width="146" height="53" rx="6" fill="#fff1f2" stroke="#f87171" stroke-width="1.2"/>
+      <text x="85" y="80" font-size="12" font-weight="700" fill="#9f1239" text-anchor="middle">Legacy Allocator</text>
+    </g>
+
+    <!-- Arrow Pricing Service -> Variant Output -->
+    <path d="M 975 100 L 1015 100" fill="none" stroke="#ef4444" stroke-width="1.8" marker-end="url(#arrRed)"/>
+
+    <!-- Component 6: Variant Output -->
+    <g transform="translate(1015, 78)">
+      <rect x="0" y="0" width="90" height="44" rx="6" fill="#fee2e2" stroke="#ef4444" stroke-width="1.4"/>
+      <text x="45" y="27" font-size="12" font-weight="700" fill="#991b1b" text-anchor="middle">Variant A / B</text>
+    </g>
+  </g>
+
+  <!-- ==================================================================== -->
+  <!-- LOWER HALF: TARGET STATE (CENTRALIZED PLATFORM)                      -->
+  <!-- ==================================================================== -->
+  <g transform="translate(30, 235)" filter="url(#cardShadow)">
+    <rect x="0" y="0" width="1120" height="195" rx="10" fill="#f6fef9" stroke="#86efac" stroke-width="1.4"/>
+
+    <!-- Section Badge -->
+    <rect x="20" y="12" width="150" height="24" rx="5" fill="url(#targetGrad)" stroke="#4ade80" stroke-width="1"/>
+    <text x="95" y="28" font-size="11" font-weight="700" fill="#065f46" text-anchor="middle" letter-spacing="0.5">TARGET PLATFORM</text>
+
+    <!-- Component 2: Token Pool (Target) -->
+    <g transform="translate(210, 52)">
+      <path d="M 0 12 C 0 5 28 0 62 0 C 96 0 125 5 125 12 L 125 84 C 125 91 96 96 62 96 C 28 96 0 91 0 84 Z" fill="#ddedff" stroke="#2563eb" stroke-width="1.5"/>
+      <path d="M 125 12 C 125 19 96 24 62 24 C 28 24 0 19 0 12" fill="none" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="62.5" y="58" font-size="12" font-weight="700" fill="#1e40af" text-anchor="middle">Token Pool</text>
+    </g>
+
+    <!-- Arrow Token Pool -> Platform Backend -->
+    <path d="M 335 100 L 385 100" fill="none" stroke="#2563eb" stroke-width="1.8" marker-end="url(#arrBlue)"/>
+
+    <!-- Component 3: Experiment Platform UI & Backend -->
+    <g transform="translate(385, 22)">
+      <!-- UI Box -->
+      <rect x="0" y="0" width="180" height="40" rx="6" fill="#ffffff" stroke="#4ade80" stroke-width="1.3"/>
+      <text x="90" y="16" font-size="12" font-weight="700" fill="#065f46" text-anchor="middle">Experiment Platform</text>
+      <text x="90" y="32" font-size="12" font-weight="700" fill="#065f46" text-anchor="middle">UI</text>
+
+      <!-- Connecting Arrow -->
+      <line x1="90" y1="40" x2="90" y2="54" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrGray)"/>
+
+      <!-- Backend Box -->
+      <rect x="0" y="54" width="180" height="48" rx="6" fill="#ffffff" stroke="#10b981" stroke-width="1.5"/>
+      <text x="90" y="74" font-size="12" font-weight="700" fill="#065f46" text-anchor="middle">Experiment Platform</text>
+      <text x="90" y="90" font-size="12" font-weight="700" fill="#065f46" text-anchor="middle">Backend</text>
+    </g>
+
+    <!-- Arrow Backend -> Metadata DB -->
+    <path d="M 565 100 L 610 100" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#arrGreen)"/>
+
+    <!-- Component 4: Experiment Platform DB -->
+    <g transform="translate(610, 52)">
+      <path d="M 0 12 C 0 5 33 0 75 0 C 117 0 150 5 150 12 L 150 84 C 150 91 117 96 75 96 C 33 96 0 91 0 84 Z" fill="#ddedff" stroke="#2563eb" stroke-width="1.5"/>
+      <path d="M 150 12 C 150 19 117 24 75 24 C 33 24 0 19 0 12" fill="none" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="75" y="52" font-size="12" font-weight="700" fill="#1e40af" text-anchor="middle">Experiment Platform</text>
+      <text x="75" y="68" font-size="12" font-weight="700" fill="#1e40af" text-anchor="middle">DB</text>
+    </g>
+
+    <!-- Arrow Metadata DB -> Pricing Service -->
+    <path d="M 760 100 L 805 100" fill="none" stroke="#2563eb" stroke-width="1.8" marker-end="url(#arrBlue)"/>
+
+    <!-- Component 5: Pricing backend service (Platform SDK) -->
+    <g transform="translate(805, 43)">
+      <rect x="0" y="0" width="170" height="114" rx="8" fill="#ffffff" stroke="#ef4444" stroke-width="1.6"/>
+      <rect x="0" y="0" width="170" height="42" rx="8" fill="#fee2e2"/>
+      <rect x="0" y="26" width="170" height="16" fill="#fee2e2"/>
+      <text x="85" y="17" font-size="12" font-weight="700" fill="#991b1b" text-anchor="middle">Pricing</text>
+      <text x="85" y="33" font-size="12" font-weight="700" fill="#991b1b" text-anchor="middle">backend service</text>
+
+      <rect x="12" y="49" width="146" height="53" rx="6" fill="#f0fdf4" stroke="#86efac" stroke-width="1.2"/>
+      <text x="85" y="80" font-size="12" font-weight="700" fill="#15803d" text-anchor="middle">Platform Client SDK</text>
+    </g>
+
+    <!-- Arrow Pricing Service -> Variant Output -->
+    <path d="M 975 100 L 1015 100" fill="none" stroke="#10b981" stroke-width="1.8" marker-end="url(#arrGreen)"/>
+
+    <!-- Component 6: Variant Output -->
+    <g transform="translate(1015, 78)">
+      <rect x="0" y="0" width="90" height="44" rx="6" fill="#dcfce7" stroke="#10b981" stroke-width="1.4"/>
+      <text x="45" y="27" font-size="12" font-weight="700" fill="#065f46" text-anchor="middle">Variant A / B</text>
+    </g>
+  </g>
+</svg>

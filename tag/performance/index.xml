@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Performance | Wit's Blog</title><link>https://witsblog.github.io/tag/performance/</link><atom:link href="https://witsblog.github.io/tag/performance/index.xml" rel="self" type="application/rss+xml"/><description>Performance</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-us</language><lastBuildDate>Wed, 16 Sep 2026 00:00:00 +0700</lastBuildDate><image><url>https://witsblog.github.io/media/icon_hu66cf44b0d2eab4dae9de00f68d847da7_1567_512x512_fill_lanczos_center_3.png</url><title>Performance</title><link>https://witsblog.github.io/tag/performance/</link></image><item><title>Debugging the 7-Day Spark Job</title><link>https://witsblog.github.io/post/083_spark_gc_starvation/</link><pubDate>Wed, 16 Sep 2026 00:00:00 +0700</pubDate><guid>https://witsblog.github.io/post/083_spark_gc_starvation/</guid><description>&lt;br>
+&lt;h2 id="the-incident-from-3-hours-to-7-days">The Incident: From 3 Hours to 7 Days&lt;/h2>
+&lt;p>Our central Spark ingestion pipeline feeds user-defined feature tables into our Feature Store, powering over 100+ production ML models. It is built to scale to
+support data science and business users across teams as our feature platform grows.&lt;/p>
+&lt;p>The job used to take about 3–4 hours. Then it went up to 4 days. Recently, it ran for over 7 days and never finished.&lt;/p>
+&lt;p>
+&lt;figure id="figure-job-duration-over-60-days--not-a-slow-regression-but-a-sharp-performance-drop">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/01.png" alt="Job duration over 60 days — Not a slow regression, but a sharp performance drop" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Job duration over 60 days — Not a slow regression, but a sharp performance drop
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;p>Initial triage checklist:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>Did we deploy a code change?&lt;/strong> No. Same commit, same configs.&lt;/li>
+&lt;li>&lt;strong>Did data volume surge?&lt;/strong> No. Row count and data size didn&amp;rsquo;t significantly increase. (I
+previously wrote a &lt;a href="https://witsblog.github.io/post/073_data_monitoring/">library&lt;/a> which monitors just exactly this.)&lt;/li>
+&lt;li>&lt;strong>Is the cluster unhealthy?&lt;/strong> No. Other teams&amp;rsquo; Spark jobs finished normally.&lt;/li>
+&lt;li>&lt;strong>Is the Feature Store throttling?&lt;/strong> No. Write latency and error rate were flat.&lt;/li>
+&lt;li>&lt;strong>Did the job fail with an error?&lt;/strong> No stack traces, no OOM errors, no non-zero exit codes. It just ran forever.&lt;/li>
+&lt;/ul>
+&lt;p>The Spark UI show active execution:&lt;/p>
+&lt;p>
+&lt;figure id="figure-active-jobs">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/02.png" alt="Active Jobs" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Active Jobs
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;p>Out of 40 tasks, 39 finished in seconds. 1 task however failed 177 times and kept retrying. Every task failure logged:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-fallback" data-lang="fallback">&lt;span class="line">&lt;span class="cl">ExecutorLostFailure (executor ... exited unrelated to the running tasks)
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">Reason: Executor killed by driver.
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>
+&lt;figure id="figure-executors-errors">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/03.png" alt="Executor&amp;#39;s errors" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Executor&amp;rsquo;s errors
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;p>The driver logs showed a heartbeat timeout every ~20 minutes:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-fallback" data-lang="fallback">&lt;span class="line">&lt;span class="cl">Removing executor ... with no recent heartbeats: 149645 ms exceeds timeout 120000 ms
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>So the driver kept killing executors in an infinite loop.&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/04.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/05.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>The job already had 16 GB per executor. The tempting fix, throwing hardware and memory at it (&lt;em>this will surely help 🤞&lt;/em>):&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-bash" data-lang="bash">&lt;span class="line">&lt;span class="cl">--executor-memory 32g --num-executors &lt;span class="m">100&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>No. This doesn&amp;rsquo;t help—it blows up the cloud bill 💵. As we will see, more executors do nothing when only one task has data. More memory only buys time before an unbounded heap fills up again.&lt;/p>
+&lt;br>
+&lt;h2 id="business-impact">Business Impact&lt;/h2>
+&lt;p>The job runs every few hours to update online features. When it stalls, 100+ production models score on stale data, directly hitting pricing predictions.&lt;/p>
+&lt;p>The goal was to get runtime back under an hour by fixing the real root cause once and for all.&lt;/p>
+&lt;br>
+&lt;h2 id="investigation">Investigation&lt;/h2>
+&lt;h3 id="1-the-parquet-midpoint-trap">1) The Parquet Midpoint Trap&lt;/h3>
+&lt;p>The input was a single ~246 MiB Parquet file. Calling &lt;code>df.rdd.getNumPartitions&lt;/code> returned 40, so Spark launched 40 tasks. But per-task metrics made no sense:&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/06.png" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>One task read all &lt;strong>45,876,936&lt;/strong> rows. The other 39 tasks read 0 bytes and finished immediately.&lt;/p>
+&lt;p>Why?&lt;/p>
+&lt;p>Parquet files store data in &lt;strong>row groups&lt;/strong>, which form the unit of work for
+Parquet readers.&lt;/p>
+&lt;p>Spark doesn&amp;rsquo;t seem know the total number of row groups when it plans. Getting
+it would mean opening every file and seeking to the end of each one for its
+footer. For multiple files on object storage like AWS S3, that can take time.
+I assume that&amp;rsquo;s the trade Spark made.&lt;/p>
+&lt;p>Instead, when Spark plans file splits, it calculates byte ranges based on file metadata via &lt;a href="https://github.com/apache/spark/blob/v3.3.4/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/FilePartition.scala#L86-L97" target="_blank" rel="noopener">&lt;code>FilePartition.maxSplitBytes&lt;/code>&lt;/a>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">def&lt;/span> &lt;span class="n">maxSplitBytes&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">sparkSession&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">SparkSession&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">selectedPartitions&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Seq&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">PartitionDirectory&lt;/span>&lt;span class="o">])&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Long&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">defaultMaxSplitBytes&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">sparkSession&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">sessionState&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">conf&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">filesMaxPartitionBytes&lt;/span> &lt;span class="c1">// 128 MiB
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">val&lt;/span> &lt;span class="n">openCostInBytes&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">sparkSession&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">sessionState&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">conf&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">filesOpenCostInBytes&lt;/span> &lt;span class="c1">// 4 MiB
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">val&lt;/span> &lt;span class="n">minPartitionNum&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">sparkSession&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">sessionState&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">conf&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">filesMinPartitionNum&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">.&lt;/span>&lt;span class="n">getOrElse&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">sparkSession&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">leafNodeDefaultParallelism&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="c1">// 40
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">val&lt;/span> &lt;span class="n">totalBytes&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">selectedPartitions&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">flatMap&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">_&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">files&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">map&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">_&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">getLen&lt;/span> &lt;span class="o">+&lt;/span> &lt;span class="n">openCostInBytes&lt;/span>&lt;span class="o">)).&lt;/span>&lt;span class="n">sum&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">bytesPerCore&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">totalBytes&lt;/span> &lt;span class="o">/&lt;/span> &lt;span class="n">minPartitionNum&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="nc">Math&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">min&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">defaultMaxSplitBytes&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="nc">Math&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">max&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">openCostInBytes&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">bytesPerCore&lt;/span>&lt;span class="o">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>Each byte range is assigned to 1 task.&lt;/p>
+&lt;p>The actual read parallelism reckoning comes at read time, when Spark passes a task&amp;rsquo;s byte range to the Parquet reader in &lt;a href="https://github.com/apache/spark/blob/v3.3.4/sql/core/src/main/java/org/apache/spark/sql/execution/datasources/parquet/SpecificParquetRecordReaderBase.java#L94-L101" target="_blank" rel="noopener">&lt;code>SpecificParquetRecordReaderBase.initialize&lt;/code>&lt;/a>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-java" data-lang="java">&lt;span class="line">&lt;span class="cl">&lt;span class="n">ParquetReadOptions&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">options&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">HadoopReadOptions&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">builder&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">configuration&lt;/span>&lt;span class="p">,&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">file&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">withRange&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">split&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getStart&lt;/span>&lt;span class="p">(),&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">split&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getStart&lt;/span>&lt;span class="p">()&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">+&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">split&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">getLength&lt;/span>&lt;span class="p">())&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="c1">// &amp;lt;-- the whole story&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">build&lt;/span>&lt;span class="p">();&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>At read time, &lt;code>parquet-java&lt;/code> determines which task owns a row group using a midpoint test in &lt;a href="https://github.com/apache/parquet-java/blob/apache-parquet-1.12.2/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L1284-L1287" target="_blank" rel="noopener">&lt;code>ParquetMetadataConverter.filterFileMetaDataByMidpoint&lt;/code>&lt;/a>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-java" data-lang="java">&lt;span class="line">&lt;span class="cl">&lt;span class="kt">long&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">midPoint&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">startIndex&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">+&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">totalSize&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="o">/&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="n">2&lt;/span>&lt;span class="p">;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="k">if&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">filter&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">contains&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">midPoint&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="n">newRowGroups&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="na">add&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">rowGroup&lt;/span>&lt;span class="p">);&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w">&lt;/span>&lt;span class="p">}&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>A task only reads a row group if its byte range covers the row group&amp;rsquo;s midpoint:&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/midpoint.svg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>In our case, the parquet file held exactly 1 row group:&lt;/p>
+&lt;p>
+&lt;figure >
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/midpoint_single.svg" alt="" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;/figure>
+&lt;/p>
+&lt;p>This explains why 1 task did all the work, even though 40 tasks were allocated.&lt;/p>
+&lt;h3 id="2-the-unbounded-future-buffer">2) The Unbounded Future Buffer&lt;/h3>
+&lt;p>The skew explains the imbalance, but it doesn&amp;rsquo;t explain why an executor with a 16 GB can&amp;rsquo;t grind through 45.8 million rows however slowly.&lt;/p>
+&lt;p>So I took a few thread dumps from an executor before dying, and all pointed to:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-text" data-lang="text">&lt;span class="line">&lt;span class="cl">&amp;#34;Executor task launch worker for task 5.260 in stage 809.0&amp;#34; RUNNABLE
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> scala.concurrent.impl.Promise$DefaultPromise.onComplete(Promise.scala:307)
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> scala.concurrent.Future.zipWith(Future.scala:457)
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> scala.concurrent.Future$.$anonfun$sequence$1(Future.scala:671)
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> scala.collection.LinearSeqOptimized.foldLeft(LinearSeqOptimized.scala:126)
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> scala.concurrent.Future$.sequence(Future.scala:671)
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> featurestore.util.ConcurrentFutureProcessor$.concurrentMap(ConcurrentFutureProcessor.scala:32)
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>I tracked it down to &lt;code>concurrentMap&lt;/code> in our shared Feature Store library:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">def&lt;/span> &lt;span class="n">concurrentMap&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">A&lt;/span>, &lt;span class="kt">T&lt;/span>&lt;span class="o">](&lt;/span>&lt;span class="n">items&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">TraversableOnce&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">A&lt;/span>&lt;span class="o">],&lt;/span> &lt;span class="n">maxInFlight&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Int&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">timeout&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Duration&lt;/span>&lt;span class="o">)(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">task&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">A&lt;/span> &lt;span class="o">=&amp;gt;&lt;/span> &lt;span class="nc">Future&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">T&lt;/span>&lt;span class="o">]&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">)(&lt;/span>&lt;span class="k">implicit&lt;/span> &lt;span class="n">ec&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">ExecutionContext&lt;/span>&lt;span class="o">)&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">List&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">T&lt;/span>&lt;span class="o">]&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">futures&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="nc">ListBuffer&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">Future&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">T&lt;/span>&lt;span class="o">]]()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">pendingFutures&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="nc">ListBuffer&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">Future&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">T&lt;/span>&lt;span class="o">]]()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">items&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">foreach&lt;/span> &lt;span class="o">{&lt;/span> &lt;span class="n">item&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">future&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">task&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">item&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">futures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">append&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">future&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="c1">// &amp;lt;-- Appended forever, never drained
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">pendingFutures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">append&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">future&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Limit concurrency to maxInFlight
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">if&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">pendingFutures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">size&lt;/span> &lt;span class="o">&amp;gt;=&lt;/span> &lt;span class="n">maxInFlight&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">pendingFutures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">headOption&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">foreach&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="nc">Await&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">ready&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">_&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">timeout&lt;/span>&lt;span class="o">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">while&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">pendingFutures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">headOption&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">exists&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">_&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">isCompleted&lt;/span>&lt;span class="o">))&lt;/span> &lt;span class="n">pendingFutures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">remove&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">futures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">nonEmpty&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="nc">Await&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">result&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="nc">Future&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">sequence&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">futures&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">toList&lt;/span>&lt;span class="o">),&lt;/span> &lt;span class="n">timeout&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="c1">// &amp;lt;-- Allocations
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="o">}&lt;/span> &lt;span class="k">else&lt;/span> &lt;span class="nc">Nil&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>The bug was subtle:&lt;/p>
+&lt;ol>
+&lt;li>&lt;code>pendingFutures&lt;/code> bounded concurrency to &lt;code>maxInFlight&lt;/code> and drained completed futures properly.&lt;/li>
+&lt;li>But &lt;code>futures&lt;/code> was never drained. Every future across all 45.8 million rows was appended into a single list and held in memory.&lt;/li>
+&lt;li>&lt;code>Future.sequence&lt;/code> made it worse: it runs a &lt;code>foldLeft&lt;/code> calling &lt;code>zipWith&lt;/code>, allocating millions more &lt;code>Promise&lt;/code> objects.&lt;/li>
+&lt;/ol>
+&lt;p>The implementation bounds concurrency, but not memory&lt;/p>
+&lt;h3 id="3-stop-the-world-gc-freezes-the-heartbeat">3) Stop-The-World GC Freezes the Heartbeat&lt;/h3>
+&lt;p>The job had no JVM telemetry, so I attached an OpenTelemetry agent to the executors to export JVM metrics to Grafana:&lt;/p>
+&lt;p>
+&lt;figure id="figure-g1-old-generation-climbing-linearly-then-gc-duration-spiking-as-it-saturates">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/07.png" alt="G1 old generation climbing linearly, then GC duration spiking as it saturates" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+G1 old generation climbing linearly, then GC duration spiking as it saturates
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;ul>
+&lt;li>Old generation heap usage (&lt;code>jvm.memory.used&lt;/code>) constantly climbed at ~700 MiB/min.&lt;/li>
+&lt;li>Old generation usage after collection (&lt;code>jvm.memory.used_after_last_gc&lt;/code>) didn&amp;rsquo;t drop after GC runs. This means the GC cannot reclaim memory because they were still considered live references by the JVM.&lt;/li>
+&lt;li>Minor GC pauses escalated to 51.4 seconds per minute, meaning application threads were frozen by stop-the-world pauses for over 86% of the time.&lt;/li>
+&lt;/ul>
+&lt;p>Spark executors send heartbeats every 10 seconds via a background thread in &lt;a href="https://github.com/apache/spark/blob/v3.3.4/core/src/main/scala/org/apache/spark/Heartbeater.scala#L38-L48" target="_blank" rel="noopener">&lt;code>Heartbeater&lt;/code>&lt;/a>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">private&lt;/span> &lt;span class="k">val&lt;/span> &lt;span class="n">heartbeater&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="nc">ThreadUtils&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">newDaemonSingleThreadScheduledExecutor&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">name&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">heartbeater&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">scheduleAtFixedRate&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">heartbeatTask&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">initialDelay&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">intervalMs&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="nc">TimeUnit&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="nc">MILLISECONDS&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;mark>A long stop-the-world GC pause freezes all JVM threads, including this heartbeater.&lt;/mark>&lt;/p>
+&lt;p>On the driver side, &lt;a href="https://github.com/apache/spark/blob/v3.3.4/core/src/main/scala/org/apache/spark/HeartbeatReceiver.scala#L202-L215" target="_blank" rel="noopener">&lt;code>HeartbeatReceiver&lt;/code>&lt;/a> waits up to 120 seconds. When an executor goes silent, the driver assumes it crashed and evicts it:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">if&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">now&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="n">lastSeenMs&lt;/span> &lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">executorTimeoutMs&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">logWarning&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="s">s&amp;#34;Removing executor &lt;/span>&lt;span class="si">$executorId&lt;/span>&lt;span class="s"> with no recent heartbeats: &amp;#34;&lt;/span> &lt;span class="o">+&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s">s&amp;#34;&lt;/span>&lt;span class="si">${&lt;/span>&lt;span class="n">now&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="n">lastSeenMs&lt;/span>&lt;span class="si">}&lt;/span>&lt;span class="s"> ms exceeds timeout &lt;/span>&lt;span class="si">$executorTimeoutMs&lt;/span>&lt;span class="s"> ms&amp;#34;&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Asynchronously kill the executor to avoid blocking the current thread
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">killExecutorThread&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">submit&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">new&lt;/span> &lt;span class="nc">Runnable&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">override&lt;/span> &lt;span class="k">def&lt;/span> &lt;span class="n">run&lt;/span>&lt;span class="o">()&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Unit&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nc">Utils&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">tryLogNonFatalError&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">sc&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">killAndReplaceExecutor&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">executorId&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>Which is exactly the log we saw:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-fallback" data-lang="fallback">&lt;span class="line">&lt;span class="cl">Removing executor 158 with no recent heartbeats: 149645 ms exceeds timeout 120000 ms
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>The driver killed the executor, requested a fresh replacement, handed it the exact same task, and watched it freeze and die again—177 times in a row.&lt;/p>
+&lt;br>
+&lt;h2 id="the-fix">The Fix&lt;/h2>
+&lt;h3 id="1-repartition-by-row-count-not-file-bytes">1) Repartition by Row Count, Not File Bytes&lt;/h3>
+&lt;p>When tasks execute per-record asynchronous calls, work volume is driven by row count, not byte size.&lt;/p>
+&lt;p>Instead of relying on Spark&amp;rsquo;s default byte splitting, we explicitly repartition based on target rows:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">val&lt;/span> &lt;span class="n">targetRowsPerPartition&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="n">_000_000&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">val&lt;/span> &lt;span class="n">partitions&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">math&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">max&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">rowCount&lt;/span> &lt;span class="o">/&lt;/span> &lt;span class="n">targetRowsPerPartition&lt;/span>&lt;span class="o">).&lt;/span>&lt;span class="n">toInt&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">df&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">repartition&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">partitions&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>This breaks any giant row groups into balanced partitions across all executors.&lt;/p>
+&lt;h3 id="2-stream-with-a-semaphore-backpressure">2) Stream with a Semaphore Backpressure&lt;/h3>
+&lt;p>Looking at the call site, the caller only cared about recording failed rows:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">val&lt;/span> &lt;span class="n">errorRows&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">df&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">mapPartitions&lt;/span> &lt;span class="o">{&lt;/span> &lt;span class="n">rows&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">rows1&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">rows2&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">rows&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">duplicate&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">implicit&lt;/span> &lt;span class="k">val&lt;/span> &lt;span class="n">ec&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">ExecutionContextExecutor&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">scala&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">concurrent&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="nc">ExecutionContext&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">global&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">rowIngestion&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="nc">RowIngestionSingletonStore&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="nc">_rowIngestionRegistryId&lt;/span>&lt;span class="o">)(...)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">try&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="nc">ConcurrentFutureProcessor&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">.&lt;/span>&lt;span class="n">concurrentMap&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">rows1&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">maxInFlight&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">timeout&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="o">{&lt;/span> &lt;span class="n">row&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">rowIngestion&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">ingestAsync&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">row&lt;/span>&lt;span class="o">).&lt;/span>&lt;span class="n">map&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">result&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">row&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">result&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="nc">SendResult&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="nc">OK&lt;/span>&lt;span class="o">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">.&lt;/span>&lt;span class="n">iterator&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">.&lt;/span>&lt;span class="n">filterNot&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">_&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">_2&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="c1">// &amp;lt;-- Discard successful rows anyway
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="o">.&lt;/span>&lt;span class="n">map&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">_&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">_1&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span> &lt;span class="k">catch&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">case&lt;/span> &lt;span class="k">_:&lt;/span> &lt;span class="kt">TimeoutException&lt;/span> &lt;span class="o">=&amp;gt;&lt;/span> &lt;span class="n">rows2&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">}(&lt;/span>&lt;span class="n">df&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">encoder&lt;/span>&lt;span class="o">).&lt;/span>&lt;span class="n">rdd&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>There was no reason to buffer 45.8 million futures. I replaced it with a bounded streaming worker using a &lt;code>Semaphore&lt;/code>, sth like:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-scala" data-lang="scala">&lt;span class="line">&lt;span class="cl">&lt;span class="k">def&lt;/span> &lt;span class="n">ingestPartitions&lt;/span>&lt;span class="o">(&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">rows&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Iterator&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">Row&lt;/span>&lt;span class="o">],&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">rowIngestion&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">RowIngestion&lt;/span>&lt;span class="o">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">maxInFlight&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Int&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">)(&lt;/span>&lt;span class="k">implicit&lt;/span> &lt;span class="n">ec&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">ExecutionContext&lt;/span>&lt;span class="o">)&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Iterator&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">Row&lt;/span>&lt;span class="o">]&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">failed&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="nc">ConcurrentLinkedQueue&lt;/span>&lt;span class="o">[&lt;/span>&lt;span class="kt">Row&lt;/span>&lt;span class="o">]()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">inFlight&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="nc">Semaphore&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">maxInFlight&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">pending&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="nc">AtomicLong&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="mi">1L&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">val&lt;/span> &lt;span class="n">done&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="nc">CountDownLatch&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">def&lt;/span> &lt;span class="n">onOneDone&lt;/span>&lt;span class="o">()&lt;/span>&lt;span class="k">:&lt;/span> &lt;span class="kt">Unit&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">inFlight&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">release&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="o">(&lt;/span>&lt;span class="n">pending&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">decrementAndGet&lt;/span>&lt;span class="o">()&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="mi">0L&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="n">done&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">countDown&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">rows&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">foreach&lt;/span> &lt;span class="o">{&lt;/span> &lt;span class="n">row&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">inFlight&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">acquire&lt;/span>&lt;span class="o">()&lt;/span> &lt;span class="c1">// Blocks reading from iterator when inFlight hits limit
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">pending&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">incrementAndGet&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">try&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">rowIngestion&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">ingestAsync&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">row&lt;/span>&lt;span class="o">).&lt;/span>&lt;span class="n">onComplete&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">case&lt;/span> &lt;span class="nc">Success&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">result&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="k">if&lt;/span> &lt;span class="n">result&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="nc">SendResult&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="nc">OK&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span> &lt;span class="n">onOneDone&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">case&lt;/span> &lt;span class="k">_&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span> &lt;span class="n">failed&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">add&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">row&lt;/span>&lt;span class="o">);&lt;/span> &lt;span class="n">onOneDone&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span> &lt;span class="k">catch&lt;/span> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">case&lt;/span> &lt;span class="nc">NonFatal&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="k">_&lt;/span>&lt;span class="o">)&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span> &lt;span class="n">failed&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">add&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">row&lt;/span>&lt;span class="o">);&lt;/span> &lt;span class="n">onOneDone&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">onOneDone&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">done&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">await&lt;/span>&lt;span class="o">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">failed&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">iterator&lt;/span>&lt;span class="o">().&lt;/span>&lt;span class="n">asScala&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">val&lt;/span> &lt;span class="n">errorRows&lt;/span> &lt;span class="k">=&lt;/span> &lt;span class="n">df&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">mapPartitions&lt;/span> &lt;span class="o">{&lt;/span> &lt;span class="n">rows&lt;/span> &lt;span class="k">=&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">ingestPartitions&lt;/span>&lt;span class="o">(&lt;/span>&lt;span class="n">rows&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">rowIngestion&lt;/span>&lt;span class="o">,&lt;/span> &lt;span class="n">maxInFlight&lt;/span>&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">}(&lt;/span>&lt;span class="n">df&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">encoder&lt;/span>&lt;span class="o">).&lt;/span>&lt;span class="n">rdd&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>This ensures:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>Constant memory footprint:&lt;/strong> Memory stays fixed at $O(\text{maxInFlight})$ instead of scaling with row count.&lt;/li>
+&lt;li>&lt;strong>Young Gen collection:&lt;/strong> Successful futures complete and are dereferenced immediately, getting garbage-collected in milliseconds without touching Old Gen.&lt;/li>
+&lt;/ul>
+&lt;br>
+&lt;h2 id="results">Results&lt;/h2>
+&lt;p>Runtime dropped from hanging indefinitely back to &lt;strong>~1 hour&lt;/strong>, while cutting executor memory from 16 GB to 8 GB.&lt;/p>
+&lt;p>
+&lt;figure id="figure-job-runtime-restored-to-1-hour">
+&lt;div class="d-flex justify-content-center">
+&lt;div class="w-100" >&lt;img src="https://witsblog.github.io/images/post/083/08.png" alt="Job runtime restored to ~1 hour" loading="lazy" data-zoomable />&lt;/div>
+&lt;/div>&lt;figcaption>
+Job runtime restored to ~1 hour
+&lt;/figcaption>&lt;/figure>
+&lt;/p>
+&lt;br>
+&lt;h2 id="learnings">Learnings&lt;/h2>
+&lt;ul>
+&lt;li>&lt;strong>Read parallelism is bounded by row groups:&lt;/strong> Spark calculates split tasks by byte ranges, but Parquet readers assign work by row group midpoint.&lt;/li>
+&lt;li>&lt;strong>The Generational Hypothesis:&lt;/strong> Most objects die young. Structure code so allocations are consumed and dereferenced immediately, never surviving into Old Generation.&lt;/li>
+&lt;/ul></description></item></channel></rss>

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 250" width="760" height="250"
+     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrowUp" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 10 5 L 0 10 L 0 0 z" fill="#c2410c"/>
+    </marker>
+  </defs>
+
+  <text x="11" y="17" font-size="14" fill="#64748b">Spark planned 3 equal byte ranges</text>
+
+  <!-- tasks: 3 equal splits across 11..749 -->
+  <rect x="11"  y="28" width="246" height="52" rx="4" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <rect x="257" y="28" width="246" height="52" rx="4" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <rect x="503" y="28" width="246" height="52" rx="4" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="134" y="60" font-size="17" fill="#1e3a8a" text-anchor="middle">task 0</text>
+  <text x="380" y="60" font-size="17" fill="#1e3a8a" text-anchor="middle">task 1</text>
+  <text x="626" y="60" font-size="17" fill="#1e3a8a" text-anchor="middle">task 2</text>
+
+  <!-- vertical midpoint connectors, drawn at the true midpoint of each row group -->
+  <g stroke="#c2410c" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrowUp)">
+    <line x1="195.5" y1="152" x2="195.5" y2="84"/>
+    <line x1="564.5" y1="152" x2="564.5" y2="84"/>
+  </g>
+  <text x="203" y="146" font-size="13" fill="#c2410c">midpoint</text>
+  <text x="572" y="146" font-size="13" fill="#c2410c">midpoint</text>
+
+  <!-- row groups: 2 equal groups across 11..749 -->
+  <rect x="11"  y="152" width="369" height="52" rx="4" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+  <rect x="380" y="152" width="369" height="52" rx="4" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+  <text x="195.5" y="184" font-size="17" fill="#78350f" text-anchor="middle">row group 1</text>
+  <text x="564.5" y="184" font-size="17" fill="#78350f" text-anchor="middle">row group 2</text>
+</svg>

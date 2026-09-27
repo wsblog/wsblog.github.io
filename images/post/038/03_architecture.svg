@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 460" width="960" height="460"
+     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrOrange" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#ea580c"/>
+    </marker>
+    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.06"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="460" fill="#f8fafc" rx="8"/>
+
+  <!-- Top: Management & Control Plane -->
+  <!-- Pricing Strategy UI -->
+  <g filter="url(#cardShadow)">
+    <rect x="200" y="24" width="200" height="44" rx="8" fill="#ffffff" stroke="#3b82f6" stroke-width="1.5"/>
+    <text x="300" y="51" font-size="13" font-weight="700" fill="#1e3a8a" text-anchor="middle">Pricing Strategy UI</text>
+  </g>
+
+  <!-- Campaign DB -->
+  <rect x="220" y="98" width="160" height="34" rx="5" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.2"/>
+  <text x="300" y="120" font-size="12" font-weight="600" fill="#334155" text-anchor="middle">Campaign DB</text>
+  <line x1="300" y1="68" x2="300" y2="96" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Experimentation UI -->
+  <g filter="url(#cardShadow)">
+    <rect x="470" y="24" width="200" height="44" rx="8" fill="#ffffff" stroke="#10b981" stroke-width="1.5"/>
+    <text x="570" y="51" font-size="13" font-weight="700" fill="#065f46" text-anchor="middle">Experimentation UI</text>
+  </g>
+
+  <!-- Experiment DB -->
+  <rect x="490" y="98" width="160" height="34" rx="5" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.2"/>
+  <text x="570" y="120" font-size="12" font-weight="600" fill="#334155" text-anchor="middle">Experiment DB</text>
+  <line x1="570" y1="68" x2="570" y2="96" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Client Request -->
+  <text x="30" y="248" font-size="13" font-weight="700" fill="#0f172a">Request</text>
+  <path d="M 30 260 L 140 260" fill="none" stroke="#2563eb" stroke-width="2.2" marker-end="url(#arrBlue)"/>
+
+  <!-- Client Response -->
+  <path d="M 140 330 L 30 330" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrBlue)"/>
+  <text x="30" y="352" font-size="13" font-weight="700" fill="#1e40af">Response</text>
+
+  <!-- Center: Backend Pricing Service -->
+  <g filter="url(#cardShadow)">
+    <rect x="150" y="180" width="460" height="240" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <rect x="150" y="180" width="460" height="34" rx="12" fill="#e2e8f0"/>
+    <rect x="150" y="204" width="460" height="10" fill="#e2e8f0"/>
+    <text x="170" y="203" font-size="13" font-weight="700" fill="#1e293b">Backend Pricing Service</text>
+
+    <!-- Sub-module 1: Rule Engine -->
+    <rect x="175" y="228" width="410" height="46" rx="7" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5"/>
+    <text x="380" y="256" font-size="13" font-weight="700" fill="#1e40af" text-anchor="middle">Rule Engine</text>
+
+    <!-- Sub-module 2: Experimentation Client Library -->
+    <rect x="175" y="288" width="410" height="46" rx="7" fill="#ecfdf5" stroke="#10b981" stroke-width="1.5"/>
+    <text x="380" y="316" font-size="13" font-weight="700" fill="#065f46" text-anchor="middle">Experimentation Client Library</text>
+
+    <!-- In-Memory Cache -->
+    <rect x="175" y="348" width="410" height="46" rx="7" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.2"/>
+    <text x="380" y="376" font-size="12" font-weight="700" fill="#334155" text-anchor="middle">In-Memory Cache</text>
+  </g>
+
+  <!-- DB Sync lines straight down into Backend Service In-Memory Cache -->
+  <line x1="300" y1="132" x2="300" y2="176" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+  <line x1="570" y1="132" x2="570" y2="176" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+
+  <!-- Right: Telemetry & Analytics Pipeline -->
+  <!-- Async Telemetry Arrow from Backend to Kafka -->
+  <path d="M 610 300 L 718 300" fill="none" stroke="#ea580c" stroke-width="1.8" stroke-dasharray="4 3" marker-end="url(#arrOrange)"/>
+
+  <!-- Kafka -->
+  <g filter="url(#cardShadow)">
+    <rect x="720" y="274" width="200" height="52" rx="8" fill="#ffffff" stroke="#f97316" stroke-width="1.5"/>
+    <text x="820" y="306" font-size="14" font-weight="700" fill="#c2410c" text-anchor="middle">Kafka</text>
+  </g>
+
+  <!-- Arrow from Kafka to Analytics -->
+  <line x1="820" y1="326" x2="820" y2="354" stroke="#f97316" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Analytics / Apache Spark -->
+  <g filter="url(#cardShadow)">
+    <rect x="720" y="356" width="200" height="52" rx="8" fill="#ffffff" stroke="#d97706" stroke-width="1.5"/>
+    <text x="820" y="388" font-size="13" font-weight="700" fill="#b45309" text-anchor="middle">Analytics (Spark / StarRocks)</text>
+  </g>
+</svg>
